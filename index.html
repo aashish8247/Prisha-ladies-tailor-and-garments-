@@ -280,23 +280,24 @@
 
   // ---------------- ADD / EDIT ENTRY ----------------
   function renderAddEntry() {
-    renderEntryForm(null, (data) => addEntry(data), 'Nayi Entry', 'Entry Jodein');
+    renderEntryForm(null, (data) => addEntry(data), 'Nayi Entry', 'Entry Jodein', renderHome);
   }
 
-  function renderEditEntry(id) {
+  function renderEditEntry(id, returnFn) {
+    returnFn = returnFn || renderHome;
     const entry = entries.find(e => e.id === id);
-    if (!entry) { renderHome(); return; }
+    if (!entry) { returnFn(); return; }
     renderEntryForm(entry, (data) => {
       entry.type = data.type;
       entry.amount = data.amount;
       entry.note = data.note;
       entry.date = data.date;
       saveEntries();
-      renderHome();
-    }, 'Entry Edit Karein', 'Update Karein');
+      returnFn();
+    }, 'Entry Edit Karein', 'Update Karein', returnFn);
   }
 
-  function renderEntryForm(existingEntry, onSave, title, saveLabel) {
+  function renderEntryForm(existingEntry, onSave, title, saveLabel, onBack) {
     app.innerHTML = `
       <div id="add-page" class="min-h-screen transition-colors bg-[#EAF6EF]">
         <div class="flex items-center gap-3 px-5 pt-6 pb-2">
@@ -365,7 +366,7 @@
     typeSelect.addEventListener('change', updateMode);
     updateMode();
 
-    document.getElementById('btn-back').addEventListener('click', renderHome);
+    document.getElementById('btn-back').addEventListener('click', onBack || renderHome);
     saveBtn.addEventListener('click', () => {
       const type = typeSelect.value;
       const amount = Number(amountInput.value);
@@ -423,7 +424,11 @@
                     ${dayGroups[d].map(e => `
                       <div class="flex items-center justify-between text-sm py-0.5">
                         <span class="text-[#3A2E20] truncate pr-2">${e.note || (e.type === 'income' ? 'Silai Income' : 'Kharcha')}</span>
-                        <span class="font-medium shrink-0 ${e.type === 'income' ? 'text-[#1F9D6C]' : 'text-[#D6455A]'}">${e.type === 'income' ? '+' : '−'}₹${formatINR(e.amount)}</span>
+                        <div class="flex items-center gap-2 shrink-0">
+                          <span class="font-medium ${e.type === 'income' ? 'text-[#1F9D6C]' : 'text-[#D6455A]'}">${e.type === 'income' ? '+' : '−'}₹${formatINR(e.amount)}</span>
+                          <button class="edit-entry-btn-monthly text-[#B8ABA0] text-xs" data-id="${e.id}">✏️</button>
+                          <button class="del-entry-btn-monthly text-[#D8C9A8] text-xs" data-id="${e.id}">🗑</button>
+                        </div>
                       </div>
                     `).join('')}
                   </div>
@@ -455,6 +460,22 @@
         const m = btn.dataset.month;
         expandedMonth = expandedMonth === m ? null : m;
         renderMonthly();
+      });
+    });
+    document.querySelectorAll('.edit-entry-btn-monthly').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        renderEditEntry(btn.dataset.id, renderMonthly);
+      });
+    });
+    document.querySelectorAll('.del-entry-btn-monthly').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (confirm('Kya aap ye entry delete karna chahte hain? Ye wapas nahi hoga.')) {
+          entries = entries.filter(e => e.id !== btn.dataset.id);
+          saveEntries();
+          renderMonthly();
+        }
       });
     });
     document.querySelectorAll('.download-pdf-btn').forEach(btn => {
