@@ -648,11 +648,12 @@
       c.phone = data.phone;
       c.amount = data.amount;
       c.note = data.note;
-      c.garmentType = data.garmentType;
-      c.garmentStyle = data.garmentStyle;
-      c.measurements = data.measurements;
+      c.garments = data.garments;
       c.extraNote = data.extraNote;
       c.photo = data.photo;
+      delete c.garmentType;
+      delete c.garmentStyle;
+      delete c.measurements;
       saveCustomers();
       renderCustomerDetail(c.id);
     }, 'Customer Edit Karein', 'Update Karein');
@@ -678,26 +679,9 @@
             <input id="c-amount" type="number" inputmode="decimal" placeholder="0" class="w-full bg-white border border-[#E8DFC8] rounded-xl pl-8 pr-3 py-2.5 text-lg font-display font-semibold outline-none focus:border-[#C9A24B]" />
           </div>
 
-          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Kapda Type</label>
-          <select id="c-garment-type" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]">
-            <option value="">-- Select karein --</option>
-            <option value="Blouse">Blouse</option>
-            <option value="Petticoat">Petticoat</option>
-            <option value="Salwar Suit">Salwar Suit</option>
-            <option value="Lehenga">Lehenga</option>
-            <option value="Saree Fall-Picot">Saree Fall-Picot</option>
-            <option value="Gown">Gown</option>
-            <option value="Kurti">Kurti</option>
-            <option value="Other">Other</option>
-          </select>
-
-          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Style / Design</label>
-          <select id="c-garment-style" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]">
-            <option value="">-- Pehle Kapda Type select karein --</option>
-          </select>
-
-          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Naap (Measurements)</label>
-          <input id="c-measurements" placeholder="Jaise: Chest-34, Kamar-30, Lambai-15" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Kapde (Ek Customer ke Multiple Kapde ho Sakte Hain)</label>
+          <div id="garments-container" class="mt-1 mb-2"></div>
+          <button type="button" id="btn-add-garment" class="w-full mb-5 py-2.5 rounded-xl border-2 border-dashed border-[#C9A24B] text-[#8A1F4D] text-sm font-semibold bg-[#FBF3E0]">+ Naya Kapda Add Karo</button>
 
           <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Extra Note (optional)</label>
           <input id="c-note-extra" placeholder="Koi aur baat likhni ho to yahan" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
@@ -716,29 +700,61 @@
       </div>
     `;
 
-    const GARMENT_STYLES = {
-      'Blouse': ['Sada Blouse', 'Katori Blouse', 'Princess Cut Blouse', 'Boat Neck Blouse', 'High Neck Blouse', 'Backless Blouse', 'Halter Neck Blouse', 'Sleeveless Blouse', 'Other Blouse'],
-      'Petticoat': ['Sada Petticoat', 'Shapewear Petticoat', 'Flare Petticoat', 'Other Petticoat'],
-      'Salwar Suit': ['Patiala Suit', 'Anarkali Suit', 'Straight Suit', 'Palazzo Suit', 'Sharara Suit', 'Churidar Suit', 'Other Suit'],
-      'Lehenga': ['A-Line Lehenga', 'Circular Lehenga', 'Fish Cut Lehenga', 'Other Lehenga'],
-      'Saree Fall-Picot': ['Fall Only', 'Picot Only', 'Fall + Picot'],
-      'Gown': ['Anarkali Gown', 'A-Line Gown', 'Mermaid Gown', 'Other Gown'],
-      'Kurti': ['Straight Kurti', 'A-Line Kurti', 'Anarkali Kurti', 'Other Kurti'],
-      'Other': ['Other'],
-    };
+    const GARMENT_TYPES = ['Blouse', 'Petticoat', 'Salwar Suit', 'Lehenga', 'Saree Fall-Picot', 'Gown', 'Kurti', 'Other'];
 
-    const garmentTypeSelect = document.getElementById('c-garment-type');
-    const garmentStyleSelect = document.getElementById('c-garment-style');
-
-    function populateStyles(selectedStyle) {
-      const styles = GARMENT_STYLES[garmentTypeSelect.value] || [];
-      if (styles.length === 0) {
-        garmentStyleSelect.innerHTML = '<option value="">-- Pehle Kapda Type select karein --</option>';
-      } else {
-        garmentStyleSelect.innerHTML = styles.map(s => `<option value="${s}" ${s === selectedStyle ? 'selected' : ''}>${s}</option>`).join('');
-      }
+    let garments;
+    if (existingCustomer && Array.isArray(existingCustomer.garments) && existingCustomer.garments.length) {
+      garments = existingCustomer.garments.map(g => ({ ...g }));
+    } else if (existingCustomer && existingCustomer.garmentType) {
+      garments = [{ type: existingCustomer.garmentType, style: existingCustomer.garmentStyle || '', measurements: existingCustomer.measurements || '' }];
+    } else {
+      garments = [{ type: '', style: '', measurements: '' }];
     }
-    garmentTypeSelect.addEventListener('change', () => populateStyles());
+
+    function garmentRowHTML(g, idx) {
+      return `
+      <div class="garment-row bg-white rounded-xl border border-[#E8DFC8] p-3 mb-2">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-[#8A1F4D]">Kapda ${idx + 1}</span>
+          ${garments.length > 1 ? `<button type="button" class="remove-garment-btn text-[#D6455A] text-xs font-semibold" data-idx="${idx}">✕ Hatao</button>` : ''}
+        </div>
+        <select class="garment-type-input w-full mb-2 bg-[#FBF8F2] border border-[#E8DFC8] rounded-lg px-3 py-2 text-sm outline-none" data-idx="${idx}">
+          <option value="">-- Kapda Type --</option>
+          ${GARMENT_TYPES.map(t => `<option value="${t}" ${g.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+        <input class="garment-style-input w-full mb-2 bg-[#FBF8F2] border border-[#E8DFC8] rounded-lg px-3 py-2 text-sm outline-none" data-idx="${idx}" placeholder="Style (jaise: Katori wala, Patiala, Sada)" value="${g.style || ''}" />
+        <input class="garment-naap-input w-full bg-[#FBF8F2] border border-[#E8DFC8] rounded-lg px-3 py-2 text-sm outline-none" data-idx="${idx}" placeholder="Naap (jaise: Chest-34, Lambai-15)" value="${g.measurements || ''}" />
+      </div>`;
+    }
+
+    function renderGarmentRows() {
+      document.getElementById('garments-container').innerHTML = garments.map((g, idx) => garmentRowHTML(g, idx)).join('');
+    }
+    renderGarmentRows();
+
+    document.getElementById('btn-add-garment').addEventListener('click', () => {
+      garments.push({ type: '', style: '', measurements: '' });
+      renderGarmentRows();
+    });
+
+    document.getElementById('garments-container').addEventListener('click', (e) => {
+      const btn = e.target.closest('.remove-garment-btn');
+      if (btn) {
+        garments.splice(Number(btn.dataset.idx), 1);
+        renderGarmentRows();
+      }
+    });
+    document.getElementById('garments-container').addEventListener('input', (e) => {
+      const idx = Number(e.target.dataset.idx);
+      if (Number.isNaN(idx)) return;
+      if (e.target.classList.contains('garment-style-input')) garments[idx].style = e.target.value;
+      if (e.target.classList.contains('garment-naap-input')) garments[idx].measurements = e.target.value;
+    });
+    document.getElementById('garments-container').addEventListener('change', (e) => {
+      const idx = Number(e.target.dataset.idx);
+      if (Number.isNaN(idx)) return;
+      if (e.target.classList.contains('garment-type-input')) garments[idx].type = e.target.value;
+    });
 
     let photoData = existingCustomer ? (existingCustomer.photo || null) : null;
 
@@ -746,12 +762,7 @@
       document.getElementById('c-name').value = existingCustomer.name || '';
       document.getElementById('c-phone').value = existingCustomer.phone || '';
       document.getElementById('c-amount').value = existingCustomer.amount || '';
-      document.getElementById('c-measurements').value = existingCustomer.measurements || '';
-      document.getElementById('c-note-extra').value = existingCustomer.extraNote || (existingCustomer.garmentType ? '' : (existingCustomer.note || ''));
-      if (existingCustomer.garmentType) {
-        garmentTypeSelect.value = existingCustomer.garmentType;
-        populateStyles(existingCustomer.garmentStyle);
-      }
+      document.getElementById('c-note-extra').value = existingCustomer.extraNote || ((existingCustomer.garments || existingCustomer.garmentType) ? '' : (existingCustomer.note || ''));
       if (existingCustomer.photo) {
         document.getElementById('photo-preview').src = existingCustomer.photo;
         document.getElementById('photo-preview').classList.remove('hidden');
@@ -778,19 +789,19 @@
       const name = document.getElementById('c-name').value.trim();
       const phone = document.getElementById('c-phone').value.trim();
       const amount = Number(document.getElementById('c-amount').value) || 0;
-      const garmentType = garmentTypeSelect.value;
-      const garmentStyle = garmentStyleSelect.value;
-      const measurements = document.getElementById('c-measurements').value.trim();
       const extraNote = document.getElementById('c-note-extra').value.trim();
       if (!name) { alert('Customer ka naam daalein'); return; }
 
-      let noteParts = [];
-      if (garmentStyle) noteParts.push(garmentStyle);
-      if (measurements) noteParts.push('Naap: ' + measurements);
+      const validGarments = garments.filter(g => g.type || g.style || g.measurements);
+      let noteParts = validGarments.map(g => {
+        let part = [g.type, g.style].filter(Boolean).join(' - ');
+        if (g.measurements) part += (part ? ' · ' : '') + 'Naap: ' + g.measurements;
+        return part;
+      }).filter(Boolean);
       if (extraNote) noteParts.push(extraNote);
-      const note = noteParts.join(' · ');
+      const note = noteParts.join(' | ');
 
-      onSave({ name, phone, amount, note, garmentType, garmentStyle, measurements, extraNote, photo: photoData });
+      onSave({ name, phone, amount, note, garments: validGarments, extraNote, photo: photoData });
     });
   }
 
@@ -823,11 +834,28 @@
               <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold">Amount</p>
               <p class="font-display text-xl font-bold text-[#1F9D6C]">₹${formatINR(c.amount)}</p>
             </div>
-            ${c.note ? `
+            ${(c.garments && c.garments.length) ? `
+            <div>
+              <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold mb-1.5">Kapde (${c.garments.length})</p>
+              <div class="space-y-1.5">
+                ${c.garments.map(g => `
+                  <div class="bg-[#FBF3E0] rounded-lg px-3 py-2 border border-[#EFE2CE]">
+                    <p class="text-sm font-semibold text-[#8A1F4D]">${[g.type, g.style].filter(Boolean).join(' — ') || 'Kapda'}</p>
+                    ${g.measurements ? `<p class="text-xs text-[#6B5B47] mt-0.5">Naap: ${g.measurements}</p>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            ${c.extraNote ? `
+            <div>
+              <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold">Extra Note</p>
+              <p class="text-sm text-[#3A2E20]">${c.extraNote}</p>
+            </div>` : ''}
+            ` : (c.note ? `
             <div>
               <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold">Kapda</p>
               <p class="text-sm text-[#3A2E20]">${c.note}</p>
-            </div>` : ''}
+            </div>` : '')}
             <div>
               <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold">Date Added</p>
               <p class="text-sm text-[#3A2E20]">${formatDateLabel(c.date)}</p>
