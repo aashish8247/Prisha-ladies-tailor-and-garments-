@@ -190,6 +190,7 @@
                   </div>
                   <div class="flex items-center gap-3 shrink-0">
                     <span class="font-display font-semibold text-sm ${e.type === 'income' ? 'text-[#1F9D6C]' : 'text-[#D6455A]'}">${e.type === 'income' ? '+' : '−'}₹${formatINR(e.amount)}</span>
+                    <button class="edit-entry-btn text-[#B8ABA0]" data-id="${e.id}">✏️</button>
                     <button class="del-entry-btn text-[#D8C9A8]" data-id="${e.id}">🗑</button>
                   </div>
                 </div>
@@ -265,18 +266,42 @@
 
     document.getElementById('fab-add').addEventListener('click', renderAddEntry);
     document.querySelectorAll('.del-entry-btn').forEach(btn => {
-      btn.addEventListener('click', () => removeEntry(btn.dataset.id));
+      btn.addEventListener('click', () => {
+        if (confirm('Kya aap ye entry delete karna chahte hain? Ye wapas nahi hoga.')) {
+          removeEntry(btn.dataset.id);
+        }
+      });
+    });
+    document.querySelectorAll('.edit-entry-btn').forEach(btn => {
+      btn.addEventListener('click', () => renderEditEntry(btn.dataset.id));
     });
     attachNav();
   }
 
-  // ---------------- ADD ENTRY ----------------
+  // ---------------- ADD / EDIT ENTRY ----------------
   function renderAddEntry() {
+    renderEntryForm(null, (data) => addEntry(data), 'Nayi Entry', 'Entry Jodein');
+  }
+
+  function renderEditEntry(id) {
+    const entry = entries.find(e => e.id === id);
+    if (!entry) { renderHome(); return; }
+    renderEntryForm(entry, (data) => {
+      entry.type = data.type;
+      entry.amount = data.amount;
+      entry.note = data.note;
+      entry.date = data.date;
+      saveEntries();
+      renderHome();
+    }, 'Entry Edit Karein', 'Update Karein');
+  }
+
+  function renderEntryForm(existingEntry, onSave, title, saveLabel) {
     app.innerHTML = `
       <div id="add-page" class="min-h-screen transition-colors bg-[#EAF6EF]">
         <div class="flex items-center gap-3 px-5 pt-6 pb-2">
           <button id="btn-back" class="text-[#3A2E20] text-xl">←</button>
-          <h2 class="font-display text-lg font-semibold text-[#3A2E20]">Nayi Entry</h2>
+          <h2 class="font-display text-lg font-semibold text-[#3A2E20]">${title}</h2>
         </div>
         <div id="mode-banner" class="mx-5 mt-3 mb-5 rounded-2xl px-4 py-3 flex items-center gap-3 text-white shadow-md">
           <span id="mode-icon" class="text-xl"></span>
@@ -300,7 +325,7 @@
           <input id="input-note" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
           <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Date</label>
           <input id="input-date" type="date" class="w-full mt-1 mb-6 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
-          <button id="btn-save" class="w-full py-3 rounded-xl text-white font-semibold shadow-md">Entry Jodein</button>
+          <button id="btn-save" class="w-full py-3 rounded-xl text-white font-semibold shadow-md">${saveLabel}</button>
         </div>
       </div>
     `;
@@ -316,7 +341,14 @@
     const modeTitle = document.getElementById('mode-title');
     const saveBtn = document.getElementById('btn-save');
 
-    dateInput.value = todayStr();
+    if (existingEntry) {
+      typeSelect.value = existingEntry.type;
+      amountInput.value = existingEntry.amount;
+      noteInput.value = existingEntry.note || '';
+      dateInput.value = existingEntry.date;
+    } else {
+      dateInput.value = todayStr();
+    }
     dateInput.max = todayStr();
 
     function updateMode() {
@@ -341,7 +373,7 @@
       const date = dateInput.value || todayStr();
       if (!amount || amount <= 0) return;
       if (type === 'expense' && !note) return;
-      addEntry({ type, amount, note, date });
+      onSave({ type, amount, note, date });
     });
   }
 
@@ -584,11 +616,29 @@
   }
 
   function renderAddCustomer() {
+    renderCustomerForm(null, (data) => addCustomer(data), 'Naya Customer', 'Customer Jodein');
+  }
+
+  function renderEditCustomer(id) {
+    const c = customers.find(x => x.id === id);
+    if (!c) { renderCustomers(); return; }
+    renderCustomerForm(c, (data) => {
+      c.name = data.name;
+      c.phone = data.phone;
+      c.amount = data.amount;
+      c.note = data.note;
+      c.photo = data.photo;
+      saveCustomers();
+      renderCustomerDetail(c.id);
+    }, 'Customer Edit Karein', 'Update Karein');
+  }
+
+  function renderCustomerForm(existingCustomer, onSave, title, saveLabel) {
     app.innerHTML = `
       <div class="min-h-screen bg-[#FDF3E7]">
         <div class="flex items-center gap-3 px-5 pt-6 pb-2">
           <button id="btn-back" class="text-[#3A2E20] text-xl">←</button>
-          <h2 class="font-display text-lg font-semibold text-[#3A2E20]">Naya Customer</h2>
+          <h2 class="font-display text-lg font-semibold text-[#3A2E20]">${title}</h2>
         </div>
         <div class="px-5 mt-3">
           <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Customer ka Naam *</label>
@@ -615,12 +665,25 @@
             <input id="c-photo" type="file" accept="image/*" capture="environment" class="w-full text-sm text-[#8A7F6A]" />
           </div>
 
-          <button id="btn-save-customer" class="w-full py-3 rounded-xl text-white font-semibold shadow-md bg-gradient-to-r from-[#A6265A] to-[#5B1638]">Customer Jodein</button>
+          <button id="btn-save-customer" class="w-full py-3 rounded-xl text-white font-semibold shadow-md bg-gradient-to-r from-[#A6265A] to-[#5B1638]">${saveLabel}</button>
         </div>
       </div>
     `;
 
-    let photoData = null;
+    let photoData = existingCustomer ? (existingCustomer.photo || null) : null;
+
+    if (existingCustomer) {
+      document.getElementById('c-name').value = existingCustomer.name || '';
+      document.getElementById('c-phone').value = existingCustomer.phone || '';
+      document.getElementById('c-amount').value = existingCustomer.amount || '';
+      document.getElementById('c-note').value = existingCustomer.note || '';
+      if (existingCustomer.photo) {
+        document.getElementById('photo-preview').src = existingCustomer.photo;
+        document.getElementById('photo-preview').classList.remove('hidden');
+        document.getElementById('photo-placeholder').classList.add('hidden');
+      }
+    }
+
     document.getElementById('c-photo').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -632,14 +695,17 @@
       });
     });
 
-    document.getElementById('btn-back').addEventListener('click', renderCustomers);
+    document.getElementById('btn-back').addEventListener('click', () => {
+      if (existingCustomer) renderCustomerDetail(existingCustomer.id);
+      else renderCustomers();
+    });
     document.getElementById('btn-save-customer').addEventListener('click', () => {
       const name = document.getElementById('c-name').value.trim();
       const phone = document.getElementById('c-phone').value.trim();
       const amount = Number(document.getElementById('c-amount').value) || 0;
       const note = document.getElementById('c-note').value.trim();
       if (!name) { alert('Customer ka naam daalein'); return; }
-      addCustomer({ name, phone, amount, note, photo: photoData });
+      onSave({ name, phone, amount, note, photo: photoData });
     });
   }
 
@@ -683,12 +749,16 @@
             </div>
           </div>
 
-          <button id="btn-delete-customer" class="w-full py-3 rounded-xl text-[#D6455A] font-semibold border-2 border-[#F0748A] bg-white">Customer Delete Karein</button>
+          <div class="flex gap-2">
+            <button id="btn-edit-customer" class="flex-1 py-3 rounded-xl text-white font-semibold shadow-md bg-gradient-to-r from-[#A6265A] to-[#5B1638]">✏️ Edit Karein</button>
+            <button id="btn-delete-customer" class="flex-1 py-3 rounded-xl text-[#D6455A] font-semibold border-2 border-[#F0748A] bg-white">🗑 Delete</button>
+          </div>
         </div>
       </div>
     `;
 
     document.getElementById('btn-back').addEventListener('click', renderCustomers);
+    document.getElementById('btn-edit-customer').addEventListener('click', () => renderEditCustomer(c.id));
     document.getElementById('btn-delete-customer').addEventListener('click', () => {
       if (confirm('Kya aap ' + c.name + ' ko delete karna chahte hain?')) {
         removeCustomer(c.id);
