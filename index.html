@@ -61,6 +61,7 @@
   let customers = loadJSON(CUSTOMERS_KEY, []);
   let shopName = localStorage.getItem(NAME_KEY) || 'Meri Silai Shop';
   let expandedMonth = null;
+  let customerSearchQuery = '';
 
   function saveEntries() { saveJSON(ENTRIES_KEY, entries); }
   function saveCustomers() { saveJSON(CUSTOMERS_KEY, customers); }
@@ -378,13 +379,25 @@
             </div>
           </button>
           ${isOpen ? `
-          <div class="px-4 pb-3 border-t border-[#F3EBDA] pt-2 space-y-1.5">
-            ${sortedList.map(e => `
-              <div class="flex items-center justify-between text-sm py-1">
-                <span class="text-[#3A2E20] truncate pr-2">${e.date.slice(8,10)}/${e.date.slice(5,7)} · ${e.note || (e.type === 'income' ? 'Silai Income' : 'Kharcha')}</span>
-                <span class="font-medium shrink-0 ${e.type === 'income' ? 'text-[#1F9D6C]' : 'text-[#D6455A]'}">${e.type === 'income' ? '+' : '−'}₹${formatINR(e.amount)}</span>
-              </div>
-            `).join('')}
+          <div class="px-4 pb-3 border-t border-[#F3EBDA] pt-3">
+            ${(() => {
+              const dayGroups = {};
+              sortedList.forEach(e => { (dayGroups[e.date] = dayGroups[e.date] || []).push(e); });
+              const dayKeys = Object.keys(dayGroups).sort((a, b) => b.localeCompare(a));
+              return dayKeys.map((d, idx) => `
+                <div class="${idx > 0 ? 'mt-3 pt-3 border-t border-dashed border-[#E8DFC8]' : ''}">
+                  <p class="text-[10px] font-bold text-[#C9A24B] uppercase tracking-wider mb-1.5">${d.slice(8,10)}/${d.slice(5,7)}/${d.slice(0,4)}</p>
+                  <div class="space-y-1">
+                    ${dayGroups[d].map(e => `
+                      <div class="flex items-center justify-between text-sm py-0.5">
+                        <span class="text-[#3A2E20] truncate pr-2">${e.note || (e.type === 'income' ? 'Silai Income' : 'Kharcha')}</span>
+                        <span class="font-medium shrink-0 ${e.type === 'income' ? 'text-[#1F9D6C]' : 'text-[#D6455A]'}">${e.type === 'income' ? '+' : '−'}₹${formatINR(e.amount)}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              `).join('');
+            })()}
           </div>
           <div class="flex gap-2 px-4 pb-4 pt-1">
             <button class="download-pdf-btn flex-1 py-2 rounded-lg bg-[#F4EFE6] border border-[#E8DFC8] text-[#5C4A2A] text-xs font-semibold flex items-center justify-center gap-1.5" data-month="${key}">📄 PDF Download</button>
@@ -501,15 +514,53 @@
 
   // ---------------- CUSTOMERS ----------------
   function renderCustomers() {
-    let listHTML = '';
+    app.innerHTML = `
+      <div class="min-h-screen bg-[#FDF3E7] pb-24">
+        <div class="bg-gradient-to-br from-[#A6265A] via-[#8A1F4D] to-[#5B1638] text-white px-5 pt-7 pb-6">
+          <h1 class="font-display text-xl font-semibold">👥 Customers</h1>
+          <p class="text-xs text-[#F2C9DB] mt-0.5">Naam, number, amount aur kapde ki photo</p>
+        </div>
+        <div class="px-5 mt-5">
+          <div class="relative mb-4">
+            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#B8ABA0]">🔍</span>
+            <input id="customer-search" type="text" placeholder="Naam se search karo..." value="${customerSearchQuery}" class="w-full bg-white border border-[#E8DFC8] rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+          </div>
+          <div id="customer-list-container"></div>
+        </div>
+        <button id="fab-add-customer" class="fixed bottom-24 right-5 w-14 h-14 rounded-full bg-gradient-to-br from-[#E0A83F] to-[#A6265A] text-white shadow-xl flex items-center justify-center active:scale-95 transition-transform z-40 text-2xl">+</button>
+        ${bottomNavHTML('customers')}
+      </div>
+    `;
+
+    renderCustomerListInner();
+
+    document.getElementById('customer-search').addEventListener('input', (e) => {
+      customerSearchQuery = e.target.value;
+      renderCustomerListInner();
+    });
+    document.getElementById('fab-add-customer').addEventListener('click', renderAddCustomer);
+    attachNav();
+  }
+
+  function renderCustomerListInner() {
+    const q = customerSearchQuery.trim().toLowerCase();
+    const filtered = q ? customers.filter(c => c.name.toLowerCase().includes(q)) : customers;
+    const container = document.getElementById('customer-list-container');
+    let html = '';
+
     if (customers.length === 0) {
-      listHTML = `<div class="text-center py-16">
+      html = `<div class="text-center py-16">
         <div class="text-3xl mb-3">👗</div>
         <p class="text-[#8A7F6A] text-sm">Abhi koi customer nahi hai.</p>
         <p class="text-[#8A7F6A] text-sm">Neeche + button se pehla customer jodo.</p>
       </div>`;
+    } else if (filtered.length === 0) {
+      html = `<div class="text-center py-14">
+        <div class="text-3xl mb-3">🔎</div>
+        <p class="text-[#8A7F6A] text-sm">"${customerSearchQuery}" naam se koi customer nahi mila.</p>
+      </div>`;
     } else {
-      listHTML = customers.map(c => `
+      html = filtered.map(c => `
         <button class="customer-card w-full text-left bg-white rounded-2xl shadow-sm border border-[#EFE2CE] p-3 mb-3 flex items-center gap-3" data-id="${c.id}">
           <div class="w-14 h-14 rounded-xl overflow-hidden bg-[#F4EFE6] flex items-center justify-center shrink-0 border border-[#EFE2CE]">
             ${c.photo ? `<img src="${c.photo}" class="w-full h-full object-cover" />` : `<span class="text-xl">👗</span>`}
@@ -526,23 +577,10 @@
       `).join('');
     }
 
-    app.innerHTML = `
-      <div class="min-h-screen bg-[#FDF3E7] pb-24">
-        <div class="bg-gradient-to-br from-[#A6265A] via-[#8A1F4D] to-[#5B1638] text-white px-5 pt-7 pb-6">
-          <h1 class="font-display text-xl font-semibold">👥 Customers</h1>
-          <p class="text-xs text-[#F2C9DB] mt-0.5">Naam, number, amount aur kapde ki photo</p>
-        </div>
-        <div class="px-5 mt-5">${listHTML}</div>
-        <button id="fab-add-customer" class="fixed bottom-24 right-5 w-14 h-14 rounded-full bg-gradient-to-br from-[#E0A83F] to-[#A6265A] text-white shadow-xl flex items-center justify-center active:scale-95 transition-transform z-40 text-2xl">+</button>
-        ${bottomNavHTML('customers')}
-      </div>
-    `;
-
-    document.getElementById('fab-add-customer').addEventListener('click', renderAddCustomer);
-    document.querySelectorAll('.customer-card').forEach(card => {
+    container.innerHTML = html;
+    container.querySelectorAll('.customer-card').forEach(card => {
       card.addEventListener('click', () => renderCustomerDetail(card.dataset.id));
     });
-    attachNav();
   }
 
   function renderAddCustomer() {
