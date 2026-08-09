@@ -251,67 +251,36 @@
   // ---------------- HOME (LEDGER) ----------------
   function renderHome() {
     currentView = 'home';
-    const todayEntries = entries.filter(e => e.date === todayStr());
-    const todayIncome = todayEntries.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
-    const todayExpense = todayEntries.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
     const totalIncome = entries.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
     const totalExpense = entries.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
     const balance = totalIncome - totalExpense;
 
-    const yestStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    const dashboardEntries = entries.filter(e => e.date === todayStr() || e.date === yestStr);
+    const latestEntry = entries.length > 0 ? entries[0] : null;
 
     let entriesHTML = '';
-    if (entries.length === 0) {
+    if (!latestEntry) {
       entriesHTML = `<div class="text-center py-16">
         <div class="text-3xl mb-3">✂️</div>
         <p class="text-[#8A7F6A] text-sm">Abhi koi entry nahi hai.</p>
         <p class="text-[#8A7F6A] text-sm">Neeche + button se pehli entry daalein.</p>
       </div>`;
-    } else if (dashboardEntries.length === 0) {
-      entriesHTML = `<div class="text-center py-14">
-        <div class="text-3xl mb-3">🗓️</div>
-        <p class="text-[#8A7F6A] text-sm">Aaj ya Kal ki koi entry nahi hai.</p>
-        <p class="text-[#8A7F6A] text-sm">Purani entries ke liye 📅 Mahine tab dekhein.</p>
-      </div>`;
     } else {
-      const groups = {};
-      dashboardEntries.forEach(e => { (groups[e.date] = groups[e.date] || []).push(e); });
-      const dateKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
-      entriesHTML = dateKeys.map((date, idx) => {
-        const list = groups[date];
-        const dayIn = list.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
-        const dayOut = list.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
-        const dividerAbove = idx > 0 ? `<div class="flex items-center gap-2 my-5"><div class="flex-1 stitch-line"></div><span class="text-[#C9A24B] text-xs">✂️</span><div class="flex-1 stitch-line"></div></div>` : '';
-        return `
-        ${dividerAbove}
-        <div class="mb-2">
-          <div class="flex items-baseline justify-between mb-2">
-            <h3 class="font-display text-base font-bold text-[#8A1F4D]">${formatDateLabel(date)}</h3>
-            <span class="text-[11px] text-[#8A7F6A] font-medium">
-              <span class="text-[#1F9D6C]">+₹${formatINR(dayIn)}</span> / <span class="text-[#D6455A]">-₹${formatINR(dayOut)}</span>
-            </span>
+      const e = latestEntry;
+      entriesHTML = `
+        <h3 class="font-display text-sm font-semibold text-[#8A1F4D] mb-2">Latest Entry — ${formatDateLabel(e.date)}</h3>
+        <div class="bg-white rounded-xl px-4 py-3 flex items-center justify-between border-l-4 shadow-sm ${e.type === 'income' ? 'border-l-[#2FBF87]' : 'border-l-[#F0748A]'}">
+          <div class="min-w-0 flex items-center gap-2">
+            <span class="${e.type === 'income' ? 'text-[#1F9D6C]' : 'text-[#D6455A]'} shrink-0">${e.type === 'income' ? '↑' : '↓'}</span>
+            <p class="text-sm font-medium text-[#3A2E20] truncate">${e.note || (e.type === 'income' ? 'Silai Income' : 'Kharcha')}</p>
           </div>
-          <div class="flex">
-            <div class="stitch-line-v mr-3 rounded-full"></div>
-            <div class="flex-1 space-y-2">
-              ${list.map(e => `
-                <div class="bg-white rounded-xl px-4 py-3 flex items-center justify-between border-l-4 shadow-sm ${e.type === 'income' ? 'border-l-[#2FBF87]' : 'border-l-[#F0748A]'}">
-                  <div class="min-w-0 flex items-center gap-2">
-                    <span class="${e.type === 'income' ? 'text-[#1F9D6C]' : 'text-[#D6455A]'} shrink-0">${e.type === 'income' ? '↑' : '↓'}</span>
-                    <p class="text-sm font-medium text-[#3A2E20] truncate">${e.note || (e.type === 'income' ? 'Silai Income' : 'Kharcha')}</p>
-                  </div>
-                  <div class="flex items-center gap-3 shrink-0">
-                    <span class="font-display font-semibold text-sm ${e.type === 'income' ? 'text-[#1F9D6C]' : 'text-[#D6455A]'}">${e.type === 'income' ? '+' : '−'}₹${formatINR(e.amount)}</span>
-                    <button class="edit-entry-btn text-[#B8ABA0]" data-id="${e.id}">✏️</button>
-                    <button class="del-entry-btn text-[#D8C9A8]" data-id="${e.id}">🗑</button>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
+          <div class="flex items-center gap-3 shrink-0">
+            <span class="font-display font-semibold text-sm ${e.type === 'income' ? 'text-[#1F9D6C]' : 'text-[#D6455A]'}">${e.type === 'income' ? '+' : '−'}₹${formatINR(e.amount)}</span>
+            <button class="edit-entry-btn text-[#B8ABA0]" data-id="${e.id}">✏️</button>
+            <button class="del-entry-btn text-[#D8C9A8]" data-id="${e.id}">🗑</button>
           </div>
-        </div>`;
-      }).join('');
+        </div>
+        <p class="text-center text-xs text-[#B8ABA0] mt-4">Baaki saari entries 📅 Mahine tab mein dekhein</p>
+      `;
     }
 
     app.innerHTML = `
@@ -328,28 +297,22 @@
           <div class="mt-5 stitch-line"></div>
           <div class="grid grid-cols-2 gap-3 mt-5 relative">
             <div class="bg-white/10 rounded-xl px-3 py-2.5 backdrop-blur-sm">
-              <p class="text-[11px] uppercase tracking-wide text-[#F2C9DB]">↑ Aaj Income</p>
-              <p class="font-display text-lg font-bold text-[#7BEFC0]">₹${formatINR(todayIncome)}</p>
+              <p class="text-[11px] uppercase tracking-wide text-[#F2C9DB]">↑ Total Income</p>
+              <p class="font-display text-lg font-bold text-[#7BEFC0]">₹${formatINR(totalIncome)}</p>
             </div>
             <div class="bg-white/10 rounded-xl px-3 py-2.5 backdrop-blur-sm">
-              <p class="text-[11px] uppercase tracking-wide text-[#F2C9DB]">↓ Aaj Kharcha</p>
-              <p class="font-display text-lg font-bold text-[#FFA6B4]">₹${formatINR(todayExpense)}</p>
+              <p class="text-[11px] uppercase tracking-wide text-[#F2C9DB]">↓ Total Kharcha</p>
+              <p class="font-display text-lg font-bold text-[#FFA6B4]">₹${formatINR(totalExpense)}</p>
             </div>
           </div>
         </div>
 
         <div class="px-5 mt-4">
-          <div class="bg-white rounded-2xl shadow-lg px-5 py-4 flex items-center justify-between border-2 border-[#FFD976]">
-            <div class="flex items-center gap-3">
-              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-[#FFD976] to-[#E0A83F] flex items-center justify-center shadow-sm text-lg">👛</div>
-              <div>
-                <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold">Total Balance</p>
-                <p class="font-display text-xl font-bold ${balance >= 0 ? 'text-[#1F9D6C]' : 'text-[#D6455A]'}">₹${formatINR(balance)}</p>
-              </div>
-            </div>
-            <div class="text-right text-[11px] text-[#8A7F6A] space-y-0.5">
-              <p class="font-medium text-[#1F9D6C]">↑ ₹${formatINR(totalIncome)}</p>
-              <p class="font-medium text-[#D6455A]">↓ ₹${formatINR(totalExpense)}</p>
+          <div class="bg-white rounded-2xl shadow-lg px-5 py-4 flex items-center gap-3 border-2 border-[#FFD976]">
+            <div class="w-11 h-11 rounded-full bg-gradient-to-br from-[#FFD976] to-[#E0A83F] flex items-center justify-center shadow-sm text-lg">👛</div>
+            <div>
+              <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold">Total Balance</p>
+              <p class="font-display text-xl font-bold ${balance >= 0 ? 'text-[#1F9D6C]' : 'text-[#D6455A]'}">₹${formatINR(balance)}</p>
             </div>
           </div>
         </div>
