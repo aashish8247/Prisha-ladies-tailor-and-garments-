@@ -11,6 +11,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Silai Hisaab" />
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -31,9 +33,30 @@
 
 <script>
 (function () {
-  const ENTRIES_KEY = 'silai-entries';
+  // ---------------- FIREBASE SETUP ----------------
+  // IMPORTANT: Paste your own Firebase project config here (see setup guide).
+  const firebaseConfig = {
+    apiKey: "AIzaSyBtyQf-yVNr35x2CWa4Xm7iIg2wBB4w_ZQ",
+    authDomain: "prisha-ladies-tailors.firebaseapp.com",
+    projectId: "prisha-ladies-tailors",
+    storageBucket: "prisha-ladies-tailors.firebasestorage.app",
+    messagingSenderId: "698330527209",
+    appId: "1:698330527209:web:b6fe21fb429408e61a0778"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  try { db.enablePersistence({ synchronizeTabs: true }); } catch (e) { /* offline cache not available */ }
+
+  const SYNC_KEY = 'silai-sync-code';
+  let syncCode = localStorage.getItem(SYNC_KEY);
+  let currentView = 'boot';
+  let unsubEntries = null, unsubCustomers = null, unsubShop = null;
+
+  function generateSyncCode() {
+    return (Math.random().toString(36).slice(2, 6) + Math.random().toString(36).slice(2, 6)).toUpperCase();
+  }
+
   const NAME_KEY = 'silai-shop-name';
-  const CUSTOMERS_KEY = 'silai-customers';
   const app = document.getElementById('app');
 
   const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -48,47 +71,136 @@
     return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', weekday: 'short' });
   }
 
-  function loadJSON(key, fallback) {
-    try { return JSON.parse(localStorage.getItem(key)) || fallback; }
-    catch (e) { return fallback; }
-  }
-  function saveJSON(key, val) {
-    try { localStorage.setItem(key, JSON.stringify(val)); }
-    catch (e) { console.error('Save failed', e); alert('Storage full ho sakta hai — kuch purani photos hata dein.'); }
-  }
-
-  let entries = loadJSON(ENTRIES_KEY, []);
-  let customers = loadJSON(CUSTOMERS_KEY, []);
-  let shopName = localStorage.getItem(NAME_KEY) || 'Meri Silai Shop';
+  let entries = [];
+  let customers = [];
+  let shopName = 'Meri Silai Shop';
   let expandedMonth = null;
   let customerSearchQuery = '';
 
-  function saveEntries() { saveJSON(ENTRIES_KEY, entries); }
-  function saveCustomers() { saveJSON(CUSTOMERS_KEY, customers); }
-  function saveShopName() { try { localStorage.setItem(NAME_KEY, shopName); } catch (e) {} }
+  function saveShopName() {
+    db.collection('shops').doc(syncCode).set({ shopName }, { merge: true }).catch((e) => console.error(e));
+  }
 
   function addEntry(entry) {
-    entry.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    entries.unshift(entry);
-    saveEntries();
-    renderHome();
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    db.collection('shops').doc(syncCode).collection('entries').doc(id).set(entry)
+      .then(renderHome)
+      .catch((e) => alert('Save nahi hua, internet check karein: ' + e.message));
   }
-  function removeEntry(id) {
-    entries = entries.filter(e => e.id !== id);
-    saveEntries();
-    renderHome();
+  function removeEntry(id, returnFn) {
+    returnFn = returnFn || renderHome;
+    db.collection('shops').doc(syncCode).collection('entries').doc(id).delete()
+      .then(returnFn)
+      .catch((e) => alert('Delete nahi hua, internet check karein: ' + e.message));
   }
   function addCustomer(c) {
-    c.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     c.date = todayStr();
-    customers.unshift(c);
-    saveCustomers();
-    renderCustomers();
+    db.collection('shops').doc(syncCode).collection('customers').doc(id).set(c)
+      .then(renderCustomers)
+      .catch((e) => alert('Save nahi hua, internet check karein: ' + e.message));
   }
   function removeCustomer(id) {
-    customers = customers.filter(c => c.id !== id);
-    saveCustomers();
-    renderCustomers();
+    db.collection('shops').doc(syncCode).collection('customers').doc(id).delete()
+      .then(renderCustomers)
+      .catch((e) => alert('Delete nahi hua, internet check karein: ' + e.message));
+  }
+
+  function startSync() {
+    unsubShop = db.collection('shops').doc(syncCode).onSnapshot((snap) => {
+      if (snap.exists && snap.data().shopName) {
+        shopName = snap.data().shopName;
+        if (currentView === 'home') renderHome();
+      }
+    });
+    unsubEntries = db.collection('shops').doc(syncCode).collection('entries').onSnapshot((snap) => {
+      entries = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => b.date.localeCompare(a.date));
+      if (currentView === 'home') renderHome();
+      else if (currentView === 'monthly') renderMonthly();
+    });
+    unsubCustomers = db.collection('shops').doc(syncCode).collection('customers').onSnapshot((snap) => {
+      customers = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      customers.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      if (currentView === 'customers') renderCustomers();
+    }, (e) => console.error('Customer sync error', e));
+  }
+
+  // ---------------- FIRST-TIME SETUP / SYNC SCREEN ----------------
+  function renderSyncSetup() {
+    currentView = 'setup';
+    app.innerHTML = `
+      <div class="min-h-screen bg-[#FDF3E7] flex flex-col items-center justify-center px-6 text-center">
+        <div class="text-4xl mb-3">✂️</div>
+        <h1 class="font-display text-xl font-semibold text-[#3A2E20] mb-1">Silai Hisaab Kitab</h1>
+        <p class="text-sm text-[#8A7F6A] mb-8">Shuru karne ke liye ek option chunein</p>
+
+        <button id="btn-new-shop" class="w-full max-w-xs py-3.5 rounded-xl text-white font-semibold shadow-md bg-gradient-to-r from-[#A6265A] to-[#5B1638] mb-3">🆕 Naya Shop Shuru Karo</button>
+
+        <div class="w-full max-w-xs text-center text-[#B8ABA0] text-xs my-3">— ya doosre phone se connect karo —</div>
+
+        <input id="existing-code-input" placeholder="Shop Code daalein" class="w-full max-w-xs bg-white border-2 border-[#E8DFC8] rounded-xl px-4 py-3 text-center text-lg font-display font-semibold uppercase outline-none focus:border-[#C9A24B] mb-3" maxlength="10" />
+        <button id="btn-connect-shop" class="w-full max-w-xs py-3.5 rounded-xl text-[#A6265A] font-semibold border-2 border-[#A6265A] bg-white">🔗 Is Code Se Connect Karo</button>
+
+        <p class="text-xs text-[#B8ABA0] mt-8 max-w-xs">Naya shop banane par ek unique code milega. Wahi code doosre phone mein daal ke same data har jagah dekh sakte ho.</p>
+      </div>
+    `;
+
+    document.getElementById('btn-new-shop').addEventListener('click', () => {
+      syncCode = generateSyncCode();
+      localStorage.setItem(SYNC_KEY, syncCode);
+      startSync();
+      renderHome();
+    });
+    document.getElementById('btn-connect-shop').addEventListener('click', () => {
+      const code = document.getElementById('existing-code-input').value.trim().toUpperCase();
+      if (!code) { alert('Code daalein'); return; }
+      syncCode = code;
+      localStorage.setItem(SYNC_KEY, syncCode);
+      startSync();
+      renderHome();
+    });
+  }
+
+  function renderSyncSettings() {
+    currentView = 'settings';
+    app.innerHTML = `
+      <div class="min-h-screen bg-[#FDF3E7] pb-24">
+        <div class="flex items-center gap-3 px-5 pt-6 pb-2">
+          <button id="btn-back" class="text-[#3A2E20] text-xl">←</button>
+          <h2 class="font-display text-lg font-semibold text-[#3A2E20]">Sync Settings</h2>
+        </div>
+        <div class="px-5 mt-3">
+          <div class="bg-white rounded-2xl shadow-sm border border-[#EFE2CE] p-4 mb-4">
+            <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold mb-2">Aapka Shop Sync Code</p>
+            <div class="flex items-center gap-2">
+              <p class="font-display text-2xl font-bold text-[#A6265A] tracking-widest flex-1">${syncCode}</p>
+              <button id="btn-copy-code" class="text-xs bg-[#F4EFE6] border border-[#E8DFC8] rounded-lg px-3 py-2 font-semibold text-[#5C4A2A]">📋 Copy</button>
+            </div>
+            <p class="text-xs text-[#8A7F6A] mt-3">Doosre phone mein Silai Hisaab kholke ye code daal do — dono devices automatically sync ho jayenge, live.</p>
+          </div>
+          <button id="btn-switch-shop" class="w-full py-3 rounded-xl text-[#D6455A] font-semibold border-2 border-[#F0748A] bg-white">Doosra Shop Code Use Karein</button>
+        </div>
+        ${bottomNavHTML('')}
+      </div>
+    `;
+    document.getElementById('btn-back').addEventListener('click', renderHome);
+    document.getElementById('btn-copy-code').addEventListener('click', () => {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(syncCode).then(() => alert('Code copy ho gaya!'));
+      }
+    });
+    document.getElementById('btn-switch-shop').addEventListener('click', () => {
+      if (confirm('Kya aap doosra shop code use karna chahte hain? Ye phone ab us naye shop se connect ho jayega.')) {
+        if (unsubEntries) unsubEntries();
+        if (unsubCustomers) unsubCustomers();
+        if (unsubShop) unsubShop();
+        localStorage.removeItem(SYNC_KEY);
+        syncCode = null;
+        entries = []; customers = []; shopName = 'Meri Silai Shop';
+        renderSyncSetup();
+      }
+    });
+    attachNav();
   }
 
   function resizeImage(file, maxW, cb) {
@@ -138,6 +250,7 @@
 
   // ---------------- HOME (LEDGER) ----------------
   function renderHome() {
+    currentView = 'home';
     const todayEntries = entries.filter(e => e.date === todayStr());
     const todayIncome = todayEntries.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
     const todayExpense = todayEntries.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
@@ -209,6 +322,7 @@
             <span class="text-[#FFD976] text-xl">✂️</span>
             <h1 id="shop-name-display" class="font-display text-xl font-semibold cursor-pointer">${shopName}</h1>
             <input id="shop-name-input" class="font-display text-xl font-semibold bg-transparent border-b border-[#FFD976] outline-none flex-1 hidden text-white" value="${shopName}" />
+            <button id="btn-sync-settings" class="ml-auto text-white/80 text-lg">🔗</button>
           </div>
           <p class="text-xs text-[#F2C9DB] mt-0.5 ml-7">Daily Hisaab Kitab</p>
           <div class="mt-5 stitch-line"></div>
@@ -263,6 +377,7 @@
     }
     nameInput.addEventListener('blur', commitName);
     nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') commitName(); });
+    document.getElementById('btn-sync-settings').addEventListener('click', renderSyncSettings);
 
     document.getElementById('fab-add').addEventListener('click', renderAddEntry);
     document.querySelectorAll('.del-entry-btn').forEach(btn => {
@@ -288,12 +403,9 @@
     const entry = entries.find(e => e.id === id);
     if (!entry) { returnFn(); return; }
     renderEntryForm(entry, (data) => {
-      entry.type = data.type;
-      entry.amount = data.amount;
-      entry.note = data.note;
-      entry.date = data.date;
-      saveEntries();
-      returnFn();
+      db.collection('shops').doc(syncCode).collection('entries').doc(id).set(data)
+        .then(returnFn)
+        .catch((e) => alert('Update nahi hua, internet check karein: ' + e.message));
     }, 'Entry Edit Karein', 'Update Karein', returnFn);
   }
 
@@ -380,6 +492,7 @@
 
   // ---------------- MONTHLY VIEW ----------------
   function renderMonthly() {
+    currentView = 'monthly';
     const monthMap = {};
     entries.forEach(e => {
       const key = e.date.slice(0, 7);
@@ -472,9 +585,7 @@
       btn.addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (confirm('Kya aap ye entry delete karna chahte hain? Ye wapas nahi hoga.')) {
-          entries = entries.filter(e => e.id !== btn.dataset.id);
-          saveEntries();
-          renderMonthly();
+          removeEntry(btn.dataset.id, renderMonthly);
         }
       });
     });
@@ -567,6 +678,7 @@
 
   // ---------------- CUSTOMERS ----------------
   function renderCustomers() {
+    currentView = 'customers';
     app.innerHTML = `
       <div class="min-h-screen bg-[#FDF3E7] pb-24">
         <div class="bg-gradient-to-br from-[#A6265A] via-[#8A1F4D] to-[#5B1638] text-white px-5 pt-7 pb-6">
@@ -644,18 +756,10 @@
     const c = customers.find(x => x.id === id);
     if (!c) { renderCustomers(); return; }
     renderCustomerForm(c, (data) => {
-      c.name = data.name;
-      c.phone = data.phone;
-      c.amount = data.amount;
-      c.note = data.note;
-      c.garments = data.garments;
-      c.extraNote = data.extraNote;
-      c.photo = data.photo;
-      delete c.garmentType;
-      delete c.garmentStyle;
-      delete c.measurements;
-      saveCustomers();
-      renderCustomerDetail(c.id);
+      data.date = c.date;
+      db.collection('shops').doc(syncCode).collection('customers').doc(id).set(data)
+        .then(() => renderCustomerDetail(id))
+        .catch((e) => alert('Update nahi hua, internet check karein: ' + e.message));
     }, 'Customer Edit Karein', 'Update Karein');
   }
 
@@ -879,7 +983,12 @@
     });
   }
 
-  renderHome();
+  if (syncCode) {
+    startSync();
+    renderHome();
+  } else {
+    renderSyncSetup();
+  }
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
