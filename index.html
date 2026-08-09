@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+<title>Meri Silai Shop - Hisaab Kitab</title>
+<meta name="theme-color" content="#A6265A" />
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', system-ui, sans-serif; margin:0; background:#FDF3E7; }
+  .font-display { font-family: 'Fraunces', serif; }
+  .stitch-line { background-image: repeating-linear-gradient(90deg, #FFD976 0, #FFD976 6px, transparent 6px, transparent 12px); height: 2px; }
+  .stitch-line-v { background-image: repeating-linear-gradient(180deg, #E0B84D 0, #E0B84D 6px, transparent 6px, transparent 12px); width: 2px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<!-- ================= LIST VIEW ================= -->
+<template id="tpl-list">
+  <div class="min-h-screen bg-[#FDF3E7] pb-28">
+    <div class="bg-gradient-to-br from-[#A6265A] via-[#8A1F4D] to-[#5B1638] text-white px-5 pt-7 pb-6 relative overflow-hidden">
+      <div class="absolute -right-6 -top-6 opacity-15">✂️</div>
+      <div class="relative flex items-center gap-2">
+        <span class="text-[#FFD976] text-xl">✂️</span>
+        <h1 id="shop-name-display" class="font-display text-xl font-semibold cursor-pointer"></h1>
+        <input id="shop-name-input" class="font-display text-xl font-semibold bg-transparent border-b border-[#FFD976] outline-none flex-1 hidden text-white" />
+      </div>
+      <p class="text-xs text-[#F2C9DB] mt-0.5 ml-7">Daily Hisaab Kitab</p>
+      <div class="mt-5 stitch-line"></div>
+      <div class="grid grid-cols-2 gap-3 mt-5 relative">
+        <div class="bg-white/10 rounded-xl px-3 py-2.5 backdrop-blur-sm">
+          <p class="text-[11px] uppercase tracking-wide text-[#F2C9DB]">↑ Aaj Income</p>
+          <p id="today-income" class="font-display text-lg font-bold text-[#7BEFC0]"></p>
+        </div>
+        <div class="bg-white/10 rounded-xl px-3 py-2.5 backdrop-blur-sm">
+          <p class="text-[11px] uppercase tracking-wide text-[#F2C9DB]">↓ Aaj Kharcha</p>
+          <p id="today-expense" class="font-display text-lg font-bold text-[#FFA6B4]"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="px-5 -mt-4">
+      <div class="bg-white rounded-2xl shadow-lg px-5 py-4 flex items-center justify-between border-2 border-[#FFD976]">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-full bg-gradient-to-br from-[#FFD976] to-[#E0A83F] flex items-center justify-center shadow-sm text-lg">👛</div>
+          <div>
+            <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold">Total Balance</p>
+            <p id="total-balance" class="font-display text-xl font-bold"></p>
+          </div>
+        </div>
+        <div class="text-right text-[11px] text-[#8A7F6A] space-y-0.5">
+          <p id="total-income" class="font-medium text-[#1F9D6C]"></p>
+          <p id="total-expense" class="font-medium text-[#D6455A]"></p>
+        </div>
+      </div>
+    </div>
+
+    <div id="entries-list" class="px-5 mt-6"></div>
+
+    <button id="fab-add" class="fixed bottom-6 right-5 w-14 h-14 rounded-full bg-gradient-to-br from-[#E0A83F] to-[#A6265A] text-white shadow-xl flex items-center justify-center active:scale-95 transition-transform z-40 text-2xl">+</button>
+  </div>
+</template>
+
+<!-- ================= EMPTY STATE ================= -->
+<template id="tpl-empty">
+  <div class="text-center py-16">
+    <div class="text-3xl mb-3">✂️</div>
+    <p class="text-[#8A7F6A] text-sm">Abhi koi entry nahi hai.</p>
+    <p class="text-[#8A7F6A] text-sm">Neeche + button se pehli entry daalein.</p>
+  </div>
+</template>
+
+<!-- ================= DAY GROUP ================= -->
+<template id="tpl-day-group">
+  <div class="mb-6">
+    <div class="flex items-baseline justify-between mb-2">
+      <h3 class="day-label font-display text-sm font-semibold text-[#8A1F4D]"></h3>
+      <span class="day-totals text-[11px] text-[#8A7F6A] font-medium"></span>
+    </div>
+    <div class="flex">
+      <div class="stitch-line-v mr-3 rounded-full"></div>
+      <div class="day-entries flex-1 space-y-2"></div>
+    </div>
+  </div>
+</template>
+
+<!-- ================= ENTRY ROW ================= -->
+<template id="tpl-entry-row">
+  <div class="entry-row bg-white rounded-xl px-4 py-3 flex items-center justify-between border-l-4 shadow-sm">
+    <div class="min-w-0 flex items-center gap-2">
+      <span class="entry-arrow shrink-0"></span>
+      <p class="entry-note text-sm font-medium text-[#3A2E20] truncate"></p>
+    </div>
+    <div class="flex items-center gap-3 shrink-0">
+      <span class="entry-amount font-display font-semibold text-sm"></span>
+      <button class="entry-delete text-[#D8C9A8] hover:text-[#D6455A] transition-colors">🗑</button>
+    </div>
+  </div>
+</template>
+
+<!-- ================= ADD ENTRY VIEW ================= -->
+<template id="tpl-add">
+  <div id="add-page" class="min-h-screen transition-colors">
+    <div class="flex items-center gap-3 px-5 pt-6 pb-2">
+      <button id="btn-back" class="text-[#3A2E20] text-xl">←</button>
+      <h2 class="font-display text-lg font-semibold text-[#3A2E20]">Nayi Entry</h2>
+    </div>
+
+    <div id="mode-banner" class="mx-5 mt-3 mb-5 rounded-2xl px-4 py-3 flex items-center gap-3 text-white shadow-md">
+      <span id="mode-icon" class="text-xl"></span>
+      <div>
+        <p id="mode-title" class="font-display font-semibold text-sm leading-tight"></p>
+        <p class="text-[11px] opacity-90">Neeche dropdown se badal sakte ho</p>
+      </div>
+    </div>
+
+    <div class="px-5">
+      <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Entry Type</label>
+      <select id="input-type" class="w-full mt-1 mb-5 border-2 rounded-xl px-3 py-3 text-base font-medium outline-none bg-white">
+        <option value="income">💰 Income (Silai)</option>
+        <option value="expense">🧵 Kharcha</option>
+      </select>
+
+      <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Amount (₹)</label>
+      <div class="relative mt-1 mb-4">
+        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A7F6A]">₹</span>
+        <input id="input-amount" type="number" inputmode="decimal" placeholder="0" class="w-full bg-white border border-[#E8DFC8] rounded-xl pl-8 pr-3 py-2.5 text-lg font-display font-semibold outline-none focus:border-[#C9A24B]" />
+      </div>
+
+      <label id="note-label" class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold"></label>
+      <input id="input-note" placeholder="" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+
+      <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Date</label>
+      <input id="input-date" type="date" class="w-full mt-1 mb-6 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+
+      <button id="btn-save" class="w-full py-3 rounded-xl text-white font-semibold shadow-md">Entry Jodein</button>
+    </div>
+  </div>
+</template>
+
+<script>
+(function () {
+  const ENTRIES_KEY = 'silai-entries';
+  const NAME_KEY = 'silai-shop-name';
+  const app = document.getElementById('app');
+
+  const todayStr = () => new Date().toISOString().slice(0, 10);
+  const formatINR = (n) => (Number(n) || 0).toLocaleString('en-IN');
+
+  function formatDateLabel(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const today = todayStr();
+    const yest = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    if (dateStr === today) return 'Aaj';
+    if (dateStr === yest) return 'Kal';
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', weekday: 'short' });
+  }
+
+  function loadEntries() {
+    try { return JSON.parse(localStorage.getItem(ENTRIES_KEY)) || []; }
+    catch (e) { return []; }
+  }
+  function saveEntries(list) {
+    try { localStorage.setItem(ENTRIES_KEY, JSON.stringify(list)); }
+    catch (e) { console.error(e); }
+  }
+  function loadShopName() {
+    return localStorage.getItem(NAME_KEY) || 'Meri Silai Shop';
+  }
+  function saveShopName(name) {
+    try { localStorage.setItem(NAME_KEY, name); } catch (e) { console.error(e); }
+  }
+
+  let entries = loadEntries();
+  let shopName = loadShopName();
+
+  function addEntry(entry) {
+    entry.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    entries.unshift(entry);
+    saveEntries(entries);
+    renderList();
+  }
+
+  function removeEntry(id) {
+    entries = entries.filter(e => e.id !== id);
+    saveEntries(entries);
+    renderList();
+  }
+
+  function renderList() {
+    app.innerHTML = '';
+    const node = document.getElementById('tpl-list').content.cloneNode(true);
+
+    const nameDisplay = node.getElementById('shop-name-display');
+    const nameInput = node.getElementById('shop-name-input');
+    nameDisplay.textContent = shopName;
+    nameInput.value = shopName;
+
+    nameDisplay.addEventListener('click', () => {
+      nameDisplay.classList.add('hidden');
+      nameInput.classList.remove('hidden');
+      nameInput.focus();
+    });
+    function commitName() {
+      shopName = nameInput.value.trim() || 'Meri Silai Shop';
+      saveShopName(shopName);
+      nameDisplay.textContent = shopName;
+      nameInput.classList.add('hidden');
+      nameDisplay.classList.remove('hidden');
+    }
+    nameInput.addEventListener('blur', commitName);
+    nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') commitName(); });
+
+    const todayEntries = entries.filter(e => e.date === todayStr());
+    const todayIncome = todayEntries.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
+    const todayExpense = todayEntries.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
+    const totalIncome = entries.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
+    const totalExpense = entries.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
+    const balance = totalIncome - totalExpense;
+
+    node.getElementById('today-income').textContent = '₹' + formatINR(todayIncome);
+    node.getElementById('today-expense').textContent = '₹' + formatINR(todayExpense);
+    const balEl = node.getElementById('total-balance');
+    balEl.textContent = '₹' + formatINR(balance);
+    balEl.className = 'font-display text-xl font-bold ' + (balance >= 0 ? 'text-[#1F9D6C]' : 'text-[#D6455A]');
+    node.getElementById('total-income').textContent = '↑ ₹' + formatINR(totalIncome);
+    node.getElementById('total-expense').textContent = '↓ ₹' + formatINR(totalExpense);
+
+    const listEl = node.getElementById('entries-list');
+    if (entries.length === 0) {
+      listEl.appendChild(document.getElementById('tpl-empty').content.cloneNode(true));
+    } else {
+      const groups = {};
+      entries.forEach(e => { (groups[e.date] = groups[e.date] || []).push(e); });
+      Object.keys(groups).sort((a, b) => b.localeCompare(a)).forEach(date => {
+        const list = groups[date];
+        const dayIn = list.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
+        const dayOut = list.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
+        const groupNode = document.getElementById('tpl-day-group').content.cloneNode(true);
+        groupNode.querySelector('.day-label').textContent = formatDateLabel(date);
+        groupNode.querySelector('.day-totals').innerHTML =
+          '<span class="text-[#1F9D6C]">+₹' + formatINR(dayIn) + '</span> / <span class="text-[#D6455A]">-₹' + formatINR(dayOut) + '</span>';
+        const dayEntriesEl = groupNode.querySelector('.day-entries');
+        list.forEach(e => {
+          const row = document.getElementById('tpl-entry-row').content.cloneNode(true);
+          const rowDiv = row.querySelector('.entry-row');
+          rowDiv.classList.add(e.type === 'income' ? 'border-l-[#2FBF87]' : 'border-l-[#F0748A]');
+          row.querySelector('.entry-arrow').textContent = e.type === 'income' ? '↑' : '↓';
+          row.querySelector('.entry-arrow').classList.add(e.type === 'income' ? 'text-[#1F9D6C]' : 'text-[#D6455A]');
+          row.querySelector('.entry-note').textContent = e.note || (e.type === 'income' ? 'Silai Income' : 'Kharcha');
+          const amountEl = row.querySelector('.entry-amount');
+          amountEl.textContent = (e.type === 'income' ? '+₹' : '−₹') + formatINR(e.amount);
+          amountEl.classList.add(e.type === 'income' ? 'text-[#1F9D6C]' : 'text-[#D6455A]');
+          row.querySelector('.entry-delete').addEventListener('click', () => removeEntry(e.id));
+          dayEntriesEl.appendChild(row);
+        });
+        listEl.appendChild(groupNode);
+      });
+    }
+
+    node.getElementById('fab-add').addEventListener('click', renderAdd);
+    app.appendChild(node);
+  }
+
+  function renderAdd() {
+    app.innerHTML = '';
+    const node = document.getElementById('tpl-add').content.cloneNode(true);
+
+    const page = node.getElementById('add-page');
+    const typeSelect = node.getElementById('input-type');
+    const amountInput = node.getElementById('input-amount');
+    const noteInput = node.getElementById('input-note');
+    const dateInput = node.getElementById('input-date');
+    const noteLabel = node.getElementById('note-label');
+    const modeBanner = node.getElementById('mode-banner');
+    const modeIcon = node.getElementById('mode-icon');
+    const modeTitle = node.getElementById('mode-title');
+    const saveBtn = node.getElementById('btn-save');
+
+    dateInput.value = todayStr();
+    dateInput.max = todayStr();
+
+    function updateMode() {
+      const isIncome = typeSelect.value === 'income';
+      page.className = 'min-h-screen transition-colors ' + (isIncome ? 'bg-[#EAF6EF]' : 'bg-[#FCEDEE]');
+      modeBanner.className = 'mx-5 mt-3 mb-5 rounded-2xl px-4 py-3 flex items-center gap-3 text-white shadow-md ' +
+        (isIncome ? 'bg-gradient-to-r from-[#1F9D6C] to-[#2FBF87]' : 'bg-gradient-to-r from-[#D6455A] to-[#F0748A]');
+      modeIcon.textContent = isIncome ? '↑' : '↓';
+      modeTitle.textContent = isIncome ? 'Income Entry — Paisa Aaya' : 'Kharcha Entry — Paisa Gaya';
+      typeSelect.className = 'w-full mt-1 mb-5 border-2 rounded-xl px-3 py-3 text-base font-medium outline-none bg-white ' +
+        (isIncome ? 'border-[#2FBF87] text-[#1F9D6C]' : 'border-[#F0748A] text-[#D6455A]');
+      noteLabel.textContent = isIncome ? 'Note (optional)' : 'Kis cheez ka kharcha? (jaise: dhaga, kapda, ration)';
+      noteInput.placeholder = isIncome ? 'Jaise: Sunita ji ka blouse' : 'Jaise: Dhaga aur button';
+      saveBtn.className = 'w-full py-3 rounded-xl text-white font-semibold shadow-md ' +
+        (isIncome ? 'bg-gradient-to-r from-[#1F9D6C] to-[#2FBF87]' : 'bg-gradient-to-r from-[#D6455A] to-[#F0748A]');
+    }
+    typeSelect.addEventListener('change', updateMode);
+    updateMode();
+
+    node.getElementById('btn-back').addEventListener('click', renderList);
+
+    saveBtn.addEventListener('click', () => {
+      const type = typeSelect.value;
+      const amount = Number(amountInput.value);
+      const note = noteInput.value.trim();
+      const date = dateInput.value || todayStr();
+      if (!amount || amount <= 0) return;
+      if (type === 'expense' && !note) return;
+      addEntry({ type, amount, note, date });
+    });
+
+    app.appendChild(node);
+  }
+
+  renderList();
+})();
+</script>
+</body>
+</html>
