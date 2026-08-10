@@ -51,7 +51,8 @@
   const SYNC_KEY = 'silai-sync-code';
   let syncCode = localStorage.getItem(SYNC_KEY);
   let currentView = 'boot';
-  let unsubEntries = null, unsubCustomers = null, unsubShop = null;
+  let currentVyapariId = null;
+  let unsubEntries = null, unsubCustomers = null, unsubShop = null, unsubVyaparis = null;
 
   function generateSyncCode() {
     return (Math.random().toString(36).slice(2, 6) + Math.random().toString(36).slice(2, 6)).toUpperCase();
@@ -74,9 +75,11 @@
 
   let entries = [];
   let customers = [];
+  let vyaparis = [];
   let shopName = 'Meri Silai Shop';
   let expandedMonth = null;
   let customerSearchQuery = '';
+  let vyapariSearchQuery = '';
 
   function saveShopName() {
     db.collection('shops').doc(syncCode).set({ shopName }, { merge: true }).catch((e) => console.error(e));
@@ -107,6 +110,57 @@
       .catch((e) => alert('Delete nahi hua, internet check karein: ' + e.message));
   }
 
+  function genId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function addVyapari(v) {
+    const id = genId();
+    v.date = todayStr();
+    v.transactions = [];
+    db.collection('shops').doc(syncCode).collection('vyaparis').doc(id).set(v)
+      .then(renderShop)
+      .catch((e) => alert('Save nahi hua, internet check karein: ' + e.message));
+  }
+  function updateVyapariInfo(id, data, returnFn) {
+    returnFn = returnFn || renderShop;
+    db.collection('shops').doc(syncCode).collection('vyaparis').doc(id).set(data, { merge: true })
+      .then(returnFn)
+      .catch((e) => alert('Update nahi hua, internet check karein: ' + e.message));
+  }
+  function removeVyapari(id) {
+    db.collection('shops').doc(syncCode).collection('vyaparis').doc(id).delete()
+      .then(renderShop)
+      .catch((e) => alert('Delete nahi hua, internet check karein: ' + e.message));
+  }
+  function addVyapariTransaction(vyapariId, txn, returnFn) {
+    returnFn = returnFn || (() => renderVyapariDetail(vyapariId));
+    const v = vyaparis.find(x => x.id === vyapariId);
+    if (!v) return;
+    txn.id = genId();
+    const updatedTxns = [...(v.transactions || []), txn];
+    db.collection('shops').doc(syncCode).collection('vyaparis').doc(vyapariId).update({ transactions: updatedTxns })
+      .then(returnFn)
+      .catch((e) => alert('Save nahi hua, internet check karein: ' + e.message));
+  }
+  function updateVyapariTransaction(vyapariId, txnId, newData, returnFn) {
+    returnFn = returnFn || (() => renderVyapariDetail(vyapariId));
+    const v = vyaparis.find(x => x.id === vyapariId);
+    if (!v) return;
+    const updatedTxns = (v.transactions || []).map(t => t.id === txnId ? { ...newData, id: txnId } : t);
+    db.collection('shops').doc(syncCode).collection('vyaparis').doc(vyapariId).update({ transactions: updatedTxns })
+      .then(returnFn)
+      .catch((e) => alert('Update nahi hua, internet check karein: ' + e.message));
+  }
+  function removeVyapariTransaction(vyapariId, txnId) {
+    const v = vyaparis.find(x => x.id === vyapariId);
+    if (!v) return;
+    const updatedTxns = (v.transactions || []).filter(t => t.id !== txnId);
+    db.collection('shops').doc(syncCode).collection('vyaparis').doc(vyapariId).update({ transactions: updatedTxns })
+      .then(() => renderVyapariDetail(vyapariId))
+      .catch((e) => alert('Delete nahi hua, internet check karein: ' + e.message));
+  }
+
   function startSync() {
     unsubShop = db.collection('shops').doc(syncCode).onSnapshot((snap) => {
       if (snap.exists && snap.data().shopName) {
@@ -124,6 +178,12 @@
       customers.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       if (currentView === 'customers') renderCustomers();
     }, (e) => console.error('Customer sync error', e));
+    unsubVyaparis = db.collection('shops').doc(syncCode).collection('vyaparis').onSnapshot((snap) => {
+      vyaparis = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      vyaparis.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      if (currentView === 'shop') renderShop();
+      else if (currentView === 'vyapariDetail' && currentVyapariId) renderVyapariDetail(currentVyapariId);
+    }, (e) => console.error('Vyapari sync error', e));
   }
 
   // ---------------- FIRST-TIME SETUP / SYNC SCREEN ----------------
@@ -195,9 +255,10 @@
         if (unsubEntries) unsubEntries();
         if (unsubCustomers) unsubCustomers();
         if (unsubShop) unsubShop();
+        if (unsubVyaparis) unsubVyaparis();
         localStorage.removeItem(SYNC_KEY);
         syncCode = null;
-        entries = []; customers = []; shopName = 'Meri Silai Shop';
+        entries = []; customers = []; vyaparis = []; shopName = 'Meri Silai Shop';
         renderSyncSetup();
       }
     });
@@ -226,12 +287,13 @@
     const tabs = [
       { key: 'home', icon: '🏠', label: 'Home' },
       { key: 'monthly', icon: '📅', label: 'Mahine' },
+      { key: 'shop', icon: '🏪', label: 'Shop' },
       { key: 'customers', icon: '👥', label: 'Customers' },
     ];
     return `
     <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-[#EFE2CE] flex justify-around items-center py-2 z-30" style="box-shadow: 0 -2px 10px rgba(0,0,0,0.06);">
       ${tabs.map(t => `
-        <button class="nav-btn flex flex-col items-center gap-0.5 px-6 py-1 ${active === t.key ? 'text-[#A6265A]' : 'text-[#B8ABA0]'}" data-tab="${t.key}">
+        <button class="nav-btn flex flex-col items-center gap-0.5 px-3 py-1 ${active === t.key ? 'text-[#A6265A]' : 'text-[#B8ABA0]'}" data-tab="${t.key}">
           <span class="text-xl">${t.icon}</span>
           <span class="text-[10px] font-semibold">${t.label}</span>
         </button>
@@ -244,6 +306,7 @@
         const tab = btn.dataset.tab;
         if (tab === 'home') renderHome();
         if (tab === 'monthly') renderMonthly();
+        if (tab === 'shop') renderShop();
         if (tab === 'customers') renderCustomers();
       });
     });
@@ -648,6 +711,354 @@
       if (document.body.contains(node)) document.body.removeChild(node);
       console.error(err);
       alert('Download mein dikkat aayi, dobara try karein.');
+    });
+  }
+
+  function buildVyapariReportNode(v) {
+    const baaki = vyapariBaaki(v);
+    const txns = (v.transactions || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+    const plainDate = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    const node = document.createElement('div');
+    node.style.width = '720px';
+    node.style.padding = '28px';
+    node.style.background = '#FDF3E7';
+    node.style.fontFamily = "'Inter', sans-serif";
+    node.innerHTML = `
+      <div style="background:linear-gradient(135deg,#A6265A,#5B1638);color:white;padding:22px 24px;border-radius:16px;margin-bottom:18px;">
+        <div style="font-size:22px;font-weight:700;">🏪 ${shopName}</div>
+        <div style="font-size:14px;opacity:0.9;margin-top:4px;">Vyapari Hisaab — ${v.name}</div>
+        ${v.phone ? `<div style="font-size:12px;opacity:0.8;margin-top:2px;">${v.phone}</div>` : ''}
+      </div>
+      <div style="background:white;border-radius:12px;padding:16px;border:2px solid ${baaki > 0 ? '#F0748A' : baaki < 0 ? '#2FBF87' : '#EFE2CE'};margin-bottom:18px;">
+        <div style="font-size:11px;color:#8A7F6A;text-transform:uppercase;">${baaki > 0 ? 'Dena Baaki Hai' : baaki < 0 ? 'Advance Diya Hua Hai' : 'Sab Clear Hai'}</div>
+        <div style="font-size:24px;font-weight:700;color:${baaki > 0 ? '#D6455A' : baaki < 0 ? '#1F9D6C' : '#8A7F6A'};">₹${formatINR(Math.abs(baaki))}</div>
+        ${v.openingBalance ? `<div style="font-size:12px;color:#8A7F6A;margin-top:4px;">Opening Balance (purana baaki): ₹${formatINR(v.openingBalance)}</div>` : ''}
+      </div>
+      <div style="background:white;border-radius:12px;border:1px solid #EFE2CE;overflow:hidden;">
+        ${txns.length === 0 ? `<div style="padding:20px;text-align:center;color:#8A7F6A;font-size:13px;">Koi transaction nahi hai.</div>` : txns.map((t, i) => {
+          const isMaal = t.type === 'maal';
+          return `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;${i !== txns.length - 1 ? 'border-bottom:1px solid #F3EBDA;' : ''}">
+            <div style="font-size:13px;color:#3A2E20;">
+              <span style="color:#8A1F4D;font-weight:600;">${plainDate(t.date)}</span>
+              &nbsp;·&nbsp; ${isMaal ? '📦 Maal Aaya' : '💵 Payment Diya'}${isMaal && t.billNo ? ' · Bill #' + t.billNo : ''}${t.note ? ' · ' + t.note : ''}
+            </div>
+            <div style="font-size:14px;font-weight:700;color:${isMaal ? '#8A1F4D' : '#1F9D6C'};">₹${formatINR(t.amount)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+    return node;
+  }
+
+  function downloadVyapariPhoto(id) {
+    if (typeof html2canvas === 'undefined') { alert('Download tool load nahi hua, internet check karke phir try karein.'); return; }
+    const v = vyaparis.find(x => x.id === id);
+    if (!v) return;
+    const node = buildVyapariReportNode(v);
+    node.style.position = 'fixed';
+    node.style.left = '-9999px';
+    node.style.top = '0';
+    document.body.appendChild(node);
+
+    html2canvas(node, { scale: 2, backgroundColor: '#FDF3E7' }).then((canvas) => {
+      document.body.removeChild(node);
+      const link = document.createElement('a');
+      link.download = `Vyapari-Hisaab-${v.name.replace(/\s+/g, '-')}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }).catch((err) => {
+      if (document.body.contains(node)) document.body.removeChild(node);
+      console.error(err);
+      alert('Download mein dikkat aayi, dobara try karein.');
+    });
+  }
+
+  // ---------------- SHOP (VYAPARI LEDGER) ----------------
+  function vyapariBaaki(v) {
+    const txns = v.transactions || [];
+    const maal = txns.filter(t => t.type === 'maal').reduce((s, t) => s + t.amount, 0);
+    const paid = txns.filter(t => t.type === 'payment').reduce((s, t) => s + t.amount, 0);
+    return Number(v.openingBalance || 0) + maal - paid;
+  }
+
+  function renderShop() {
+    currentView = 'shop';
+    app.innerHTML = `
+      <div class="min-h-screen bg-[#FDF3E7] pb-24">
+        <div class="bg-gradient-to-br from-[#A6265A] via-[#8A1F4D] to-[#5B1638] text-white px-5 pt-7 pb-6">
+          <h1 class="font-display text-xl font-semibold">🏪 Shop (Vyapari Hisaab)</h1>
+          <p class="text-xs text-[#F2C9DB] mt-0.5">Maal aur payment ka hisaab, har vyapari ka alag</p>
+        </div>
+        <div class="px-5 mt-5">
+          <div class="relative mb-4">
+            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#B8ABA0]">🔍</span>
+            <input id="vyapari-search" type="text" placeholder="Vyapari naam se search karo..." value="${vyapariSearchQuery}" class="w-full bg-white border border-[#E8DFC8] rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+          </div>
+          <div id="vyapari-list-container"></div>
+        </div>
+        <button id="fab-add-vyapari" class="fixed bottom-24 right-5 w-14 h-14 rounded-full bg-gradient-to-br from-[#E0A83F] to-[#A6265A] text-white shadow-xl flex items-center justify-center active:scale-95 transition-transform z-40 text-2xl">+</button>
+        ${bottomNavHTML('shop')}
+      </div>
+    `;
+
+    renderVyapariListInner();
+
+    document.getElementById('vyapari-search').addEventListener('input', (e) => {
+      vyapariSearchQuery = e.target.value;
+      renderVyapariListInner();
+    });
+    document.getElementById('fab-add-vyapari').addEventListener('click', renderAddVyapari);
+    attachNav();
+  }
+
+  function renderVyapariListInner() {
+    const q = vyapariSearchQuery.trim().toLowerCase();
+    const filtered = q ? vyaparis.filter(v => v.name.toLowerCase().includes(q)) : vyaparis;
+    const container = document.getElementById('vyapari-list-container');
+    let html = '';
+
+    if (vyaparis.length === 0) {
+      html = `<div class="text-center py-16">
+        <div class="text-3xl mb-3">🏪</div>
+        <p class="text-[#8A7F6A] text-sm">Abhi koi vyapari nahi hai.</p>
+        <p class="text-[#8A7F6A] text-sm">Neeche + button se pehla vyapari jodo.</p>
+      </div>`;
+    } else if (filtered.length === 0) {
+      html = `<div class="text-center py-14">
+        <div class="text-3xl mb-3">🔎</div>
+        <p class="text-[#8A7F6A] text-sm">"${vyapariSearchQuery}" naam se koi vyapari nahi mila.</p>
+      </div>`;
+    } else {
+      html = filtered.map(v => {
+        const baaki = vyapariBaaki(v);
+        return `
+        <button class="vyapari-card w-full text-left bg-white rounded-2xl shadow-sm border border-[#EFE2CE] p-4 mb-3 flex items-center justify-between" data-id="${v.id}">
+          <div class="min-w-0">
+            <p class="font-display font-semibold text-[#3A2E20] truncate">${v.name}</p>
+            ${v.phone ? `<p class="text-xs text-[#8A7F6A] truncate">${v.phone}</p>` : ''}
+          </div>
+          <div class="text-right shrink-0 ml-3">
+            <p class="text-[10px] text-[#8A7F6A] uppercase tracking-wide font-semibold">${baaki > 0 ? 'Baaki' : baaki < 0 ? 'Advance' : 'Clear'}</p>
+            <p class="font-display font-bold ${baaki > 0 ? 'text-[#D6455A]' : baaki < 0 ? 'text-[#1F9D6C]' : 'text-[#8A7F6A]'}">₹${formatINR(Math.abs(baaki))}</p>
+          </div>
+        </button>`;
+      }).join('');
+    }
+
+    container.innerHTML = html;
+    container.querySelectorAll('.vyapari-card').forEach(card => {
+      card.addEventListener('click', () => renderVyapariDetail(card.dataset.id));
+    });
+  }
+
+  function renderAddVyapari() {
+    renderVyapariForm(null, (data) => addVyapari(data));
+  }
+  function renderEditVyapari(id) {
+    const v = vyaparis.find(x => x.id === id);
+    if (!v) { renderShop(); return; }
+    renderVyapariForm(v, (data) => updateVyapariInfo(id, data, () => renderVyapariDetail(id)));
+  }
+
+  function renderVyapariForm(existingVyapari, onSave) {
+    app.innerHTML = `
+      <div class="min-h-screen bg-[#FDF3E7]">
+        <div class="flex items-center gap-3 px-5 pt-6 pb-2">
+          <button id="btn-back" class="text-[#3A2E20] text-xl">←</button>
+          <h2 class="font-display text-lg font-semibold text-[#3A2E20]">${existingVyapari ? 'Vyapari Edit Karein' : 'Naya Vyapari'}</h2>
+        </div>
+        <div class="px-5 mt-3">
+          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Vyapari / Dukaan ka Naam *</label>
+          <input id="v-name" placeholder="Jaise: Ramesh Cloth House" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+
+          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Phone Number (optional)</label>
+          <input id="v-phone" type="tel" placeholder="10 digit mobile number" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+
+          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Aaj Tak ka Purana Baaki (Opening Balance)</label>
+          <div class="relative mt-1 mb-1">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A7F6A]">₹</span>
+            <input id="v-opening" type="number" inputmode="decimal" placeholder="0" class="w-full bg-white border border-[#E8DFC8] rounded-xl pl-8 pr-3 py-2.5 text-lg font-display font-semibold outline-none focus:border-[#C9A24B]" />
+          </div>
+          <p class="text-xs text-[#B8ABA0] mb-4">Purane bills ek-ek karke bharne ki zaroorat nahi — bas abhi tak ka total baaki yahan daal do. Aage se naya maal/payment normal tareeke se add hoga.</p>
+
+          <button id="btn-save-vyapari" class="w-full py-3 rounded-xl text-white font-semibold shadow-md bg-gradient-to-r from-[#A6265A] to-[#5B1638]">${existingVyapari ? 'Update Karein' : 'Vyapari Jodein'}</button>
+        </div>
+      </div>
+    `;
+
+    if (existingVyapari) {
+      document.getElementById('v-name').value = existingVyapari.name || '';
+      document.getElementById('v-phone').value = existingVyapari.phone || '';
+      document.getElementById('v-opening').value = existingVyapari.openingBalance || '';
+    }
+
+    document.getElementById('btn-back').addEventListener('click', () => {
+      if (existingVyapari) renderVyapariDetail(existingVyapari.id);
+      else renderShop();
+    });
+    document.getElementById('btn-save-vyapari').addEventListener('click', () => {
+      const name = document.getElementById('v-name').value.trim();
+      const phone = document.getElementById('v-phone').value.trim();
+      const openingBalance = Number(document.getElementById('v-opening').value) || 0;
+      if (!name) { alert('Vyapari ka naam daalein'); return; }
+      onSave({ name, phone, openingBalance });
+    });
+  }
+
+  function renderVyapariDetail(id) {
+    currentView = 'vyapariDetail';
+    currentVyapariId = id;
+    const v = vyaparis.find(x => x.id === id);
+    if (!v) { renderShop(); return; }
+
+    const baaki = vyapariBaaki(v);
+    const txns = (v.transactions || []).slice().sort((a, b) => b.date.localeCompare(a.date));
+
+    app.innerHTML = `
+      <div class="min-h-screen bg-[#FDF3E7] pb-24">
+        <div class="flex items-center gap-3 px-5 pt-6 pb-2">
+          <button id="btn-back" class="text-[#3A2E20] text-xl">←</button>
+          <h2 class="font-display text-lg font-semibold text-[#3A2E20] truncate">${v.name}</h2>
+        </div>
+
+        <div class="px-5 mt-3">
+          ${v.phone ? `<a href="tel:${v.phone}" class="text-xs text-[#A6265A] font-medium">${v.phone} 📞</a>` : ''}
+
+          <div class="bg-white rounded-2xl shadow-lg px-5 py-4 border-2 ${baaki > 0 ? 'border-[#F0748A]' : baaki < 0 ? 'border-[#2FBF87]' : 'border-[#E8DFC8]'} mt-3 mb-4">
+            <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold">${baaki > 0 ? 'Aapko Dena Baaki Hai' : baaki < 0 ? 'Advance Diya Hua Hai' : 'Sab Clear Hai'}</p>
+            <p class="font-display text-2xl font-bold ${baaki > 0 ? 'text-[#D6455A]' : baaki < 0 ? 'text-[#1F9D6C]' : 'text-[#8A7F6A]'}">₹${formatINR(Math.abs(baaki))}</p>
+          </div>
+
+          <div class="flex gap-2 mb-5">
+            <button id="btn-add-maal" class="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 border-[#C9A24B] text-[#8A1F4D] bg-[#FBF3E0]">📦 Naya Maal Aaya</button>
+            <button id="btn-add-payment" class="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 border-[#2FBF87] text-[#1F9D6C] bg-white">💵 Payment Diya</button>
+          </div>
+
+          <h3 class="font-display text-sm font-semibold text-[#8A1F4D] mb-2">Transaction History</h3>
+          ${v.openingBalance ? `<p class="text-xs text-[#B8ABA0] mb-2">Opening Balance (purana baaki): ₹${formatINR(v.openingBalance)}</p>` : ''}
+          <div id="vyapari-txn-list" class="space-y-2 mb-4"></div>
+
+          <button id="btn-download-vyapari" class="w-full py-2.5 rounded-xl text-sm font-semibold border-2 border-[#E8DFC8] bg-[#F4EFE6] text-[#5C4A2A] mb-2 flex items-center justify-center gap-1.5">🖼️ Photo Download Karein</button>
+          <button id="btn-edit-vyapari" class="w-full py-2.5 rounded-xl text-sm font-semibold border-2 border-[#E8DFC8] text-[#5C4A2A] bg-white mb-2">✏️ Vyapari Details Edit Karein</button>
+          <button id="btn-delete-vyapari" class="w-full py-2.5 rounded-xl text-sm font-semibold border-2 border-[#F0748A] text-[#D6455A] bg-white">🗑 Vyapari Delete Karein</button>
+        </div>
+        ${bottomNavHTML('shop')}
+      </div>
+    `;
+
+    function plainDate(d) {
+      return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    const listEl = document.getElementById('vyapari-txn-list');
+    if (txns.length === 0) {
+      listEl.innerHTML = `<div class="text-center py-8 text-[#8A7F6A] text-sm">Abhi koi transaction nahi hai.</div>`;
+    } else {
+      listEl.innerHTML = txns.map(t => {
+        const isMaal = t.type === 'maal';
+        return `
+        <div class="rounded-xl px-3 py-3 flex items-center gap-3 shadow-sm ${isMaal ? 'bg-[#FBF3E0] border border-[#E8D4A0]' : 'bg-[#EAF6EF] border border-[#B9E6CE]'}">
+          <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0 ${isMaal ? 'bg-[#E8D4A0]' : 'bg-[#B9E6CE]'}">${isMaal ? '📦' : '💵'}</div>
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold ${isMaal ? 'text-[#8A1F4D]' : 'text-[#1F9D6C]'}">${isMaal ? 'Maal Aaya' : 'Payment Diya'}${isMaal && t.billNo ? ` · Bill #${t.billNo}` : ''}</p>
+            <p class="text-[11px] text-[#8A7F6A]">${plainDate(t.date)}${t.note ? ' · ' + t.note : ''}</p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="font-display font-bold text-sm ${isMaal ? 'text-[#8A1F4D]' : 'text-[#1F9D6C]'}">₹${formatINR(t.amount)}</span>
+            <button class="edit-txn-btn text-[#B8ABA0] text-xs" data-id="${t.id}">✏️</button>
+            <button class="del-txn-btn text-[#D8C9A8] text-xs" data-id="${t.id}">🗑</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    document.getElementById('btn-back').addEventListener('click', renderShop);
+    document.getElementById('btn-add-maal').addEventListener('click', () => renderAddTransaction(id, 'maal'));
+    document.getElementById('btn-add-payment').addEventListener('click', () => renderAddTransaction(id, 'payment'));
+    document.getElementById('btn-download-vyapari').addEventListener('click', () => downloadVyapariPhoto(id));
+    document.getElementById('btn-edit-vyapari').addEventListener('click', () => renderEditVyapari(id));
+    document.getElementById('btn-delete-vyapari').addEventListener('click', () => {
+      if (confirm('Kya aap ' + v.name + ' ko delete karna chahte hain? Sab transactions bhi delete ho jayenge.')) {
+        removeVyapari(id);
+      }
+    });
+    listEl.querySelectorAll('.edit-txn-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const txn = (v.transactions || []).find(t => t.id === btn.dataset.id);
+        if (txn) renderAddTransaction(id, txn.type, txn);
+      });
+    });
+    listEl.querySelectorAll('.del-txn-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (confirm('Kya aap ye transaction delete karna chahte hain?')) {
+          removeVyapariTransaction(id, btn.dataset.id);
+        }
+      });
+    });
+    attachNav();
+  }
+
+  function renderAddTransaction(vyapariId, type, existingTxn) {
+    const isMaal = type === 'maal';
+    app.innerHTML = `
+      <div class="min-h-screen ${isMaal ? 'bg-[#FBF3E0]' : 'bg-[#EAF6EF]'}">
+        <div class="flex items-center gap-3 px-5 pt-6 pb-2">
+          <button id="btn-back" class="text-[#3A2E20] text-xl">←</button>
+          <h2 class="font-display text-lg font-semibold text-[#3A2E20]">${existingTxn ? 'Transaction Edit Karein' : (isMaal ? 'Naya Maal Aaya' : 'Payment Diya')}</h2>
+        </div>
+
+        <div class="mx-5 mt-3 mb-5 rounded-2xl px-4 py-3 flex items-center gap-3 text-white shadow-md ${isMaal ? 'bg-gradient-to-r from-[#C9A24B] to-[#8A1F4D]' : 'bg-gradient-to-r from-[#1F9D6C] to-[#2FBF87]'}">
+          <span class="text-xl">${isMaal ? '📦' : '💵'}</span>
+          <p class="font-display font-semibold text-sm">${isMaal ? 'Maal Aaya — Baaki Badhega' : 'Payment Diya — Baaki Ghatega'}</p>
+        </div>
+
+        <div class="px-5">
+          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Amount (₹)</label>
+          <div class="relative mt-1 mb-4">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A7F6A]">₹</span>
+            <input id="t-amount" type="number" inputmode="decimal" placeholder="0" class="w-full bg-white border border-[#E8DFC8] rounded-xl pl-8 pr-3 py-2.5 text-lg font-display font-semibold outline-none focus:border-[#C9A24B]" />
+          </div>
+
+          ${isMaal ? `
+          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Bill Number</label>
+          <input id="t-billno" placeholder="Jaise: 4521" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+          ` : ''}
+
+          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Note (optional)</label>
+          <input id="t-note" placeholder="${isMaal ? 'Jaise: Cotton kapda 20 meter' : 'Jaise: Cash diya'}" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+
+          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Date</label>
+          <input id="t-date" type="date" class="w-full mt-1 mb-6 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+
+          <button id="btn-save-txn" class="w-full py-3 rounded-xl text-white font-semibold shadow-md ${isMaal ? 'bg-gradient-to-r from-[#C9A24B] to-[#8A1F4D]' : 'bg-gradient-to-r from-[#1F9D6C] to-[#2FBF87]'}">${existingTxn ? 'Update Karein' : 'Save Karein'}</button>
+        </div>
+      </div>
+    `;
+
+    const dateInput = document.getElementById('t-date');
+    dateInput.max = todayStr();
+    dateInput.value = existingTxn ? existingTxn.date : todayStr();
+    document.getElementById('t-amount').value = existingTxn ? existingTxn.amount : '';
+    document.getElementById('t-note').value = existingTxn ? (existingTxn.note || '') : '';
+    if (isMaal) {
+      document.getElementById('t-billno').value = existingTxn ? (existingTxn.billNo || '') : '';
+    }
+
+    document.getElementById('btn-back').addEventListener('click', () => renderVyapariDetail(vyapariId));
+    document.getElementById('btn-save-txn').addEventListener('click', () => {
+      const amount = Number(document.getElementById('t-amount').value);
+      const note = document.getElementById('t-note').value.trim();
+      const date = dateInput.value || todayStr();
+      const billNo = isMaal ? document.getElementById('t-billno').value.trim() : '';
+      if (!amount || amount <= 0) { alert('Amount daalein'); return; }
+      const data = { type, amount, note, date, billNo };
+      if (existingTxn) {
+        updateVyapariTransaction(vyapariId, existingTxn.id, data);
+      } else {
+        addVyapariTransaction(vyapariId, data);
+      }
     });
   }
 
