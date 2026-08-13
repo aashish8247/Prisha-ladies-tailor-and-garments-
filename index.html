@@ -239,6 +239,14 @@
             </div>
             <p class="text-xs text-[#8A7F6A] mt-3">Doosre phone mein Silai Hisaab kholke ye code daal do — dono devices automatically sync ho jayenge, live.</p>
           </div>
+
+          <div class="bg-white rounded-2xl shadow-sm border border-[#EFE2CE] p-4 mb-4">
+            <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold mb-2">Code Ko Yaad Rakhne Wala Naam Do</p>
+            <input id="rename-code-input" placeholder="Jaise: PRISHA2026" class="w-full bg-[#FBF8F2] border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm uppercase outline-none focus:border-[#C9A24B] mb-2" maxlength="20" />
+            <button id="btn-rename-code" class="w-full py-2.5 rounded-xl text-white font-semibold text-sm bg-gradient-to-r from-[#A6265A] to-[#5B1638]">Code Badlein (Data Wahi Rahega)</button>
+            <p class="text-xs text-[#B8ABA0] mt-2">Aapka saara purana data (entries, customers, vyapari) naye code mein automatically copy ho jayega.</p>
+          </div>
+
           <button id="btn-switch-shop" class="w-full py-3 rounded-xl text-[#D6455A] font-semibold border-2 border-[#F0748A] bg-white">Doosra Shop Code Use Karein</button>
         </div>
         ${bottomNavHTML('')}
@@ -248,6 +256,27 @@
     document.getElementById('btn-copy-code').addEventListener('click', () => {
       if (navigator.clipboard) {
         navigator.clipboard.writeText(syncCode).then(() => alert('Code copy ho gaya!'));
+      }
+    });
+    document.getElementById('btn-rename-code').addEventListener('click', async () => {
+      const input = document.getElementById('rename-code-input');
+      const newCode = input.value.trim().toUpperCase().replace(/\s+/g, '');
+      if (!newCode) { alert('Naya code likhein'); return; }
+      if (newCode === syncCode) { alert('Ye to already aapka current code hai'); return; }
+      if (!confirm(`Code "${syncCode}" se "${newCode}" mein badlein? Saara data copy ho jayega.`)) return;
+
+      const btn = document.getElementById('btn-rename-code');
+      btn.disabled = true;
+      btn.textContent = 'Copy ho raha hai... intezaar karein';
+
+      try {
+        await renameSyncCode(newCode);
+        alert('Ho gaya! Naya code: ' + newCode + '\n\nIsi naye code ko doosre devices mein bhi use karein.');
+        renderSyncSettings();
+      } catch (e) {
+        alert('Kuch dikkat aayi: ' + e.message);
+        btn.disabled = false;
+        btn.textContent = 'Code Badlein (Data Wahi Rahega)';
       }
     });
     document.getElementById('btn-switch-shop').addEventListener('click', () => {
@@ -263,6 +292,35 @@
       }
     });
     attachNav();
+  }
+
+  async function renameSyncCode(newCode) {
+    const oldCode = syncCode;
+    const oldShopDoc = await db.collection('shops').doc(oldCode).get();
+    const shopData = oldShopDoc.exists ? oldShopDoc.data() : { shopName };
+
+    const newShopRef = db.collection('shops').doc(newCode);
+    const writes = [newShopRef.set(shopData)];
+
+    const [entriesSnap, customersSnap, vyaparisSnap] = await Promise.all([
+      db.collection('shops').doc(oldCode).collection('entries').get(),
+      db.collection('shops').doc(oldCode).collection('customers').get(),
+      db.collection('shops').doc(oldCode).collection('vyaparis').get(),
+    ]);
+    entriesSnap.forEach((doc) => writes.push(newShopRef.collection('entries').doc(doc.id).set(doc.data())));
+    customersSnap.forEach((doc) => writes.push(newShopRef.collection('customers').doc(doc.id).set(doc.data())));
+    vyaparisSnap.forEach((doc) => writes.push(newShopRef.collection('vyaparis').doc(doc.id).set(doc.data())));
+
+    await Promise.all(writes);
+
+    if (unsubEntries) unsubEntries();
+    if (unsubCustomers) unsubCustomers();
+    if (unsubShop) unsubShop();
+    if (unsubVyaparis) unsubVyaparis();
+
+    syncCode = newCode;
+    localStorage.setItem(SYNC_KEY, syncCode);
+    startSync();
   }
 
   function resizeImage(file, maxW, cb) {
