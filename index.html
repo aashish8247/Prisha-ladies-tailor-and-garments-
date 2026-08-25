@@ -706,22 +706,22 @@
 
     function rowsHTML(rows, color) {
       if (rows.length === 0) {
-        return `<div style="padding:14px;text-align:center;color:#8A7F6A;font-size:12px;">Koi entry nahi hai.</div>`;
+        return `<div style="padding:12px;text-align:center;color:#8A7F6A;font-size:11px;">Koi entry nahi hai.</div>`;
       }
       return rows.map((e, i) => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;${i !== rows.length - 1 ? 'border-bottom:1px solid #F3EBDA;' : ''}">
-          <div style="font-size:13px;color:#3A2E20;">
-            <span style="color:#8A1F4D;font-weight:600;">${e.date.slice(8, 10)}/${e.date.slice(5, 7)}</span>
-            &nbsp;·&nbsp; ${e.note || (e.type === 'income' ? 'Silai Income' : 'Kharcha')}
+        <div style="padding:8px 10px;${i !== rows.length - 1 ? 'border-bottom:1px solid #F3EBDA;' : ''}">
+          <div style="font-size:11px;color:#8A1F4D;font-weight:700;">${e.date.slice(8, 10)}/${e.date.slice(5, 7)}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:1px;">
+            <div style="font-size:12px;color:#3A2E20;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.note || (e.type === 'income' ? 'Silai Income' : 'Kharcha')}</div>
+            <div style="font-size:13px;font-weight:700;white-space:nowrap;color:${color};">₹${formatINR(e.amount)}</div>
           </div>
-          <div style="font-size:14px;font-weight:600;color:${color};">${e.type === 'income' ? '+' : '−'}₹${formatINR(e.amount)}</div>
         </div>
       `).join('');
     }
 
     const node = document.createElement('div');
-    node.style.width = '720px';
-    node.style.padding = '28px';
+    node.style.width = '640px';
+    node.style.padding = '26px';
     node.style.background = '#FDF3E7';
     node.style.fontFamily = "'Inter', sans-serif";
     node.innerHTML = `
@@ -729,7 +729,7 @@
         <div style="font-size:22px;font-weight:700;">✂️ ${shopName}</div>
         <div style="font-size:13px;opacity:0.85;margin-top:4px;">Monthly Hisaab — ${label}</div>
       </div>
-      <div style="display:flex;gap:12px;margin-bottom:18px;">
+      <div style="display:flex;gap:12px;margin-bottom:16px;">
         <div style="flex:1;background:white;border-radius:12px;padding:14px;border:1px solid #EFE2CE;">
           <div style="font-size:11px;color:#8A7F6A;text-transform:uppercase;">Total Income</div>
           <div style="font-size:20px;font-weight:700;color:#1F9D6C;">₹${formatINR(inc)}</div>
@@ -744,14 +744,19 @@
         </div>
       </div>
 
-      <div style="font-size:13px;font-weight:700;color:#1F9D6C;margin-bottom:6px;">↑ Income Entries</div>
-      <div style="background:white;border-radius:12px;border:1px solid #EFE2CE;overflow:hidden;margin-bottom:16px;">
-        ${rowsHTML(incomeList, '#1F9D6C')}
-      </div>
-
-      <div style="font-size:13px;font-weight:700;color:#D6455A;margin-bottom:6px;">↓ Kharcha Entries</div>
-      <div style="background:white;border-radius:12px;border:1px solid #EFE2CE;overflow:hidden;">
-        ${rowsHTML(expenseList, '#D6455A')}
+      <div style="display:flex;gap:10px;align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-size:12px;font-weight:700;color:#1F9D6C;margin-bottom:5px;">↑ Income</div>
+          <div style="background:white;border-radius:12px;border:1px solid #EFE2CE;overflow:hidden;">
+            ${rowsHTML(incomeList, '#1F9D6C')}
+          </div>
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:12px;font-weight:700;color:#D6455A;margin-bottom:5px;">↓ Kharcha</div>
+          <div style="background:white;border-radius:12px;border:1px solid #EFE2CE;overflow:hidden;">
+            ${rowsHTML(expenseList, '#D6455A')}
+          </div>
+        </div>
       </div>
     `;
     return node;
