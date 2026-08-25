@@ -697,10 +697,27 @@
   // ---------------- MONTH REPORT DOWNLOAD (PDF / PHOTO) ----------------
   function buildReportNode(key) {
     const list = entries.filter(e => e.date.slice(0, 7) === key).sort((a, b) => a.date.localeCompare(b.date));
-    const inc = list.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
-    const exp = list.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
+    const incomeList = list.filter(e => e.type === 'income');
+    const expenseList = list.filter(e => e.type === 'expense');
+    const inc = incomeList.reduce((s, e) => s + e.amount, 0);
+    const exp = expenseList.reduce((s, e) => s + e.amount, 0);
     const bal = inc - exp;
     const label = new Date(key + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+    function rowsHTML(rows, color) {
+      if (rows.length === 0) {
+        return `<div style="padding:14px;text-align:center;color:#8A7F6A;font-size:12px;">Koi entry nahi hai.</div>`;
+      }
+      return rows.map((e, i) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;${i !== rows.length - 1 ? 'border-bottom:1px solid #F3EBDA;' : ''}">
+          <div style="font-size:13px;color:#3A2E20;">
+            <span style="color:#8A1F4D;font-weight:600;">${e.date.slice(8, 10)}/${e.date.slice(5, 7)}</span>
+            &nbsp;·&nbsp; ${e.note || (e.type === 'income' ? 'Silai Income' : 'Kharcha')}
+          </div>
+          <div style="font-size:14px;font-weight:600;color:${color};">${e.type === 'income' ? '+' : '−'}₹${formatINR(e.amount)}</div>
+        </div>
+      `).join('');
+    }
 
     const node = document.createElement('div');
     node.style.width = '720px';
@@ -726,16 +743,15 @@
           <div style="font-size:20px;font-weight:700;color:${bal >= 0 ? '#1F9D6C' : '#D6455A'};">₹${formatINR(bal)}</div>
         </div>
       </div>
+
+      <div style="font-size:13px;font-weight:700;color:#1F9D6C;margin-bottom:6px;">↑ Income Entries</div>
+      <div style="background:white;border-radius:12px;border:1px solid #EFE2CE;overflow:hidden;margin-bottom:16px;">
+        ${rowsHTML(incomeList, '#1F9D6C')}
+      </div>
+
+      <div style="font-size:13px;font-weight:700;color:#D6455A;margin-bottom:6px;">↓ Kharcha Entries</div>
       <div style="background:white;border-radius:12px;border:1px solid #EFE2CE;overflow:hidden;">
-        ${list.length === 0 ? `<div style="padding:20px;text-align:center;color:#8A7F6A;font-size:13px;">Is mahine koi entry nahi hai.</div>` : list.map((e, i) => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;${i !== list.length - 1 ? 'border-bottom:1px solid #F3EBDA;' : ''}">
-            <div style="font-size:13px;color:#3A2E20;">
-              <span style="color:#8A1F4D;font-weight:600;">${e.date.slice(8, 10)}/${e.date.slice(5, 7)}</span>
-              &nbsp;·&nbsp; ${e.note || (e.type === 'income' ? 'Silai Income' : 'Kharcha')}
-            </div>
-            <div style="font-size:14px;font-weight:600;color:${e.type === 'income' ? '#1F9D6C' : '#D6455A'};">${e.type === 'income' ? '+' : '−'}₹${formatINR(e.amount)}</div>
-          </div>
-        `).join('')}
+        ${rowsHTML(expenseList, '#D6455A')}
       </div>
     `;
     return node;
