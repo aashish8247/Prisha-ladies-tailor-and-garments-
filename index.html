@@ -52,7 +52,7 @@
   let syncCode = localStorage.getItem(SYNC_KEY);
   let currentView = 'boot';
   let currentVyapariId = null;
-  let unsubEntries = null, unsubCustomers = null, unsubShop = null, unsubVyaparis = null;
+  let unsubEntries = null, unsubCustomers = null, unsubShop = null, unsubVyaparis = null, unsubUdhaar = null;
 
   function generateSyncCode() {
     return (Math.random().toString(36).slice(2, 6) + Math.random().toString(36).slice(2, 6)).toUpperCase();
@@ -76,6 +76,7 @@
   let entries = [];
   let customers = [];
   let vyaparis = [];
+  let udhaarList = [];
   let shopName = 'Meri Silai Shop';
   let expandedMonth = null;
   let customerSearchQuery = '';
@@ -161,6 +162,33 @@
       .catch((e) => alert('Delete nahi hua, internet check karein: ' + e.message));
   }
 
+  function addUdhaar(u) {
+    const id = genId();
+    u.status = 'pending';
+    db.collection('shops').doc(syncCode).collection('udhaar').doc(id).set(u)
+      .then(renderUdhar)
+      .catch((e) => alert('Save nahi hua, internet check karein: ' + e.message));
+  }
+  function updateUdhaar(id, data, returnFn) {
+    returnFn = returnFn || renderUdhar;
+    db.collection('shops').doc(syncCode).collection('udhaar').doc(id).set(data, { merge: true })
+      .then(returnFn)
+      .catch((e) => alert('Update nahi hua, internet check karein: ' + e.message));
+  }
+  function toggleUdhaarStatus(id) {
+    const u = udhaarList.find(x => x.id === id);
+    if (!u) return;
+    const newStatus = u.status === 'paid' ? 'pending' : 'paid';
+    db.collection('shops').doc(syncCode).collection('udhaar').doc(id).update({ status: newStatus })
+      .then(renderUdhar)
+      .catch((e) => alert('Update nahi hua, internet check karein: ' + e.message));
+  }
+  function removeUdhaar(id) {
+    db.collection('shops').doc(syncCode).collection('udhaar').doc(id).delete()
+      .then(renderUdhar)
+      .catch((e) => alert('Delete nahi hua, internet check karein: ' + e.message));
+  }
+
   function startSync() {
     unsubShop = db.collection('shops').doc(syncCode).onSnapshot((snap) => {
       if (snap.exists && snap.data().shopName) {
@@ -184,6 +212,11 @@
       if (currentView === 'shop') renderShop();
       else if (currentView === 'vyapariDetail' && currentVyapariId) renderVyapariDetail(currentVyapariId);
     }, (e) => console.error('Vyapari sync error', e));
+    unsubUdhaar = db.collection('shops').doc(syncCode).collection('udhaar').onSnapshot((snap) => {
+      udhaarList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      udhaarList.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      if (currentView === 'udhar') renderUdhar();
+    }, (e) => console.error('Udhaar sync error', e));
   }
 
   // ---------------- FIRST-TIME SETUP / SYNC SCREEN ----------------
@@ -285,9 +318,10 @@
         if (unsubCustomers) unsubCustomers();
         if (unsubShop) unsubShop();
         if (unsubVyaparis) unsubVyaparis();
+        if (unsubUdhaar) unsubUdhaar();
         localStorage.removeItem(SYNC_KEY);
         syncCode = null;
-        entries = []; customers = []; vyaparis = []; shopName = 'Meri Silai Shop';
+        entries = []; customers = []; vyaparis = []; udhaarList = []; shopName = 'Meri Silai Shop';
         renderSyncSetup();
       }
     });
@@ -302,14 +336,16 @@
     const newShopRef = db.collection('shops').doc(newCode);
     const writes = [newShopRef.set(shopData)];
 
-    const [entriesSnap, customersSnap, vyaparisSnap] = await Promise.all([
+    const [entriesSnap, customersSnap, vyaparisSnap, udhaarSnap] = await Promise.all([
       db.collection('shops').doc(oldCode).collection('entries').get(),
       db.collection('shops').doc(oldCode).collection('customers').get(),
       db.collection('shops').doc(oldCode).collection('vyaparis').get(),
+      db.collection('shops').doc(oldCode).collection('udhaar').get(),
     ]);
     entriesSnap.forEach((doc) => writes.push(newShopRef.collection('entries').doc(doc.id).set(doc.data())));
     customersSnap.forEach((doc) => writes.push(newShopRef.collection('customers').doc(doc.id).set(doc.data())));
     vyaparisSnap.forEach((doc) => writes.push(newShopRef.collection('vyaparis').doc(doc.id).set(doc.data())));
+    udhaarSnap.forEach((doc) => writes.push(newShopRef.collection('udhaar').doc(doc.id).set(doc.data())));
 
     await Promise.all(writes);
 
@@ -317,6 +353,7 @@
     if (unsubCustomers) unsubCustomers();
     if (unsubShop) unsubShop();
     if (unsubVyaparis) unsubVyaparis();
+    if (unsubUdhaar) unsubUdhaar();
 
     syncCode = newCode;
     localStorage.setItem(SYNC_KEY, syncCode);
@@ -346,14 +383,15 @@
       { key: 'home', icon: '🏠', label: 'Home' },
       { key: 'monthly', icon: '📅', label: 'Mahine' },
       { key: 'shop', icon: '🏪', label: 'Shop' },
+      { key: 'udhar', icon: '📒', label: 'Udhar' },
       { key: 'customers', icon: '👥', label: 'Customers' },
     ];
     return `
     <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-[#EFE2CE] flex justify-around items-center py-2 z-30" style="box-shadow: 0 -2px 10px rgba(0,0,0,0.06);">
       ${tabs.map(t => `
-        <button class="nav-btn flex flex-col items-center gap-0.5 px-3 py-1 ${active === t.key ? 'text-[#A6265A]' : 'text-[#B8ABA0]'}" data-tab="${t.key}">
-          <span class="text-xl">${t.icon}</span>
-          <span class="text-[10px] font-semibold">${t.label}</span>
+        <button class="nav-btn flex flex-col items-center gap-0.5 px-1.5 py-1 ${active === t.key ? 'text-[#A6265A]' : 'text-[#B8ABA0]'}" data-tab="${t.key}">
+          <span class="text-lg">${t.icon}</span>
+          <span class="text-[9px] font-semibold">${t.label}</span>
         </button>
       `).join('')}
     </div>`;
@@ -365,6 +403,7 @@
         if (tab === 'home') renderHome();
         if (tab === 'monthly') renderMonthly();
         if (tab === 'shop') renderShop();
+        if (tab === 'udhar') renderUdhar();
         if (tab === 'customers') renderCustomers();
       });
     });
@@ -1142,6 +1181,134 @@
       } else {
         addVyapariTransaction(vyapariId, data);
       }
+    });
+  }
+
+  // ---------------- UDHAR (CUSTOMER DUES) ----------------
+  function renderUdhar() {
+    currentView = 'udhar';
+    const totalBaaki = udhaarList.filter(u => u.status !== 'paid').reduce((s, u) => s + u.amount, 0);
+    const pending = udhaarList.filter(u => u.status !== 'paid');
+    const paid = udhaarList.filter(u => u.status === 'paid');
+
+    function rowHTML(u) {
+      const isPaid = u.status === 'paid';
+      return `
+        <div class="bg-white rounded-2xl shadow-sm border ${isPaid ? 'border-[#EFE2CE] opacity-60' : 'border-[#F0748A]'} p-4 mb-3">
+          <div class="flex items-center justify-between">
+            <div class="min-w-0">
+              <p class="font-display font-semibold text-[#3A2E20] truncate ${isPaid ? 'line-through' : ''}">${u.customerName}</p>
+              <p class="text-xs text-[#8A7F6A]">${formatDateLabel(u.date)}${u.note ? ' · ' + u.note : ''}</p>
+            </div>
+            <p class="font-display font-bold shrink-0 ml-2 ${isPaid ? 'text-[#8A7F6A]' : 'text-[#D6455A]'}">₹${formatINR(u.amount)}</p>
+          </div>
+          <div class="flex gap-2 mt-3">
+            <button class="toggle-udhaar-btn flex-1 py-1.5 rounded-lg text-xs font-semibold ${isPaid ? 'bg-[#F4EFE6] text-[#5C4A2A] border border-[#E8DFC8]' : 'bg-[#EAF6EF] text-[#1F9D6C] border border-[#B9E6CE]'}" data-id="${u.id}">${isPaid ? '↩️ Wapas Pending Karein' : '✅ Paid Mark Karein'}</button>
+            <button class="edit-udhaar-btn text-[#B8ABA0] px-2" data-id="${u.id}">✏️</button>
+            <button class="del-udhaar-btn text-[#D8C9A8] px-2" data-id="${u.id}">🗑</button>
+          </div>
+        </div>`;
+    }
+
+    app.innerHTML = `
+      <div class="min-h-screen bg-[#FDF3E7] pb-24">
+        <div class="bg-gradient-to-br from-[#A6265A] via-[#8A1F4D] to-[#5B1638] text-white px-5 pt-7 pb-6">
+          <h1 class="font-display text-xl font-semibold">📒 Udhar (Customer Baaki)</h1>
+          <p class="text-xs text-[#F2C9DB] mt-0.5">Customers se kitna lena baaki hai</p>
+        </div>
+        <div class="px-5 -mt-4">
+          <div class="bg-white rounded-2xl shadow-lg px-5 py-4 border-2 border-[#FFD976]">
+            <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold">Total Udhar Baaki</p>
+            <p class="font-display text-xl font-bold text-[#D6455A]">₹${formatINR(totalBaaki)}</p>
+          </div>
+        </div>
+        <div class="px-5 mt-6">
+          ${udhaarList.length === 0 ? `
+            <div class="text-center py-16">
+              <div class="text-3xl mb-3">📒</div>
+              <p class="text-[#8A7F6A] text-sm">Abhi koi udhar entry nahi hai.</p>
+              <p class="text-[#8A7F6A] text-sm">Neeche + button se pehli entry jodo.</p>
+            </div>
+          ` : `
+            ${pending.length > 0 ? `<h3 class="font-display text-sm font-semibold text-[#8A1F4D] mb-2">Baaki Hai (${pending.length})</h3>${pending.map(rowHTML).join('')}` : `<p class="text-center text-sm text-[#8A7F6A] py-4">Sab kuch clear hai! 🎉</p>`}
+            ${paid.length > 0 ? `<h3 class="font-display text-sm font-semibold text-[#8A7F6A] mb-2 mt-5">Paid Ho Chuka (${paid.length})</h3>${paid.map(rowHTML).join('')}` : ''}
+          `}
+        </div>
+        <button id="fab-add-udhaar" class="fixed bottom-24 right-5 w-14 h-14 rounded-full bg-gradient-to-br from-[#E0A83F] to-[#A6265A] text-white shadow-xl flex items-center justify-center active:scale-95 transition-transform z-40 text-2xl">+</button>
+        ${bottomNavHTML('udhar')}
+      </div>
+    `;
+
+    document.getElementById('fab-add-udhaar').addEventListener('click', renderAddUdhaar);
+    document.querySelectorAll('.toggle-udhaar-btn').forEach(btn => {
+      btn.addEventListener('click', () => toggleUdhaarStatus(btn.dataset.id));
+    });
+    document.querySelectorAll('.edit-udhaar-btn').forEach(btn => {
+      btn.addEventListener('click', () => renderEditUdhaar(btn.dataset.id));
+    });
+    document.querySelectorAll('.del-udhaar-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (confirm('Kya aap ye udhar entry delete karna chahte hain?')) removeUdhaar(btn.dataset.id);
+      });
+    });
+    attachNav();
+  }
+
+  function renderAddUdhaar() {
+    renderUdhaarForm(null, (data) => addUdhaar(data));
+  }
+  function renderEditUdhaar(id) {
+    const u = udhaarList.find(x => x.id === id);
+    if (!u) { renderUdhar(); return; }
+    renderUdhaarForm(u, (data) => updateUdhaar(id, data));
+  }
+
+  function renderUdhaarForm(existingUdhaar, onSave) {
+    app.innerHTML = `
+      <div class="min-h-screen bg-[#FCEDEE]">
+        <div class="flex items-center gap-3 px-5 pt-6 pb-2">
+          <button id="btn-back" class="text-[#3A2E20] text-xl">←</button>
+          <h2 class="font-display text-lg font-semibold text-[#3A2E20]">${existingUdhaar ? 'Udhar Edit Karein' : 'Nayi Udhar Entry'}</h2>
+        </div>
+        <div class="px-5 mt-3">
+          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Customer ka Naam *</label>
+          <input id="u-name" placeholder="Jaise: Sunita Devi" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+
+          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Amount (₹) *</label>
+          <div class="relative mt-1 mb-4">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A7F6A]">₹</span>
+            <input id="u-amount" type="number" inputmode="decimal" placeholder="0" class="w-full bg-white border border-[#E8DFC8] rounded-xl pl-8 pr-3 py-2.5 text-lg font-display font-semibold outline-none focus:border-[#C9A24B]" />
+          </div>
+
+          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Date</label>
+          <input id="u-date" type="date" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+
+          <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Note (optional)</label>
+          <input id="u-note" placeholder="Jaise: Blouse ka bakaya" class="w-full mt-1 mb-6 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+
+          <button id="btn-save-udhaar" class="w-full py-3 rounded-xl text-white font-semibold shadow-md bg-gradient-to-r from-[#D6455A] to-[#F0748A]">${existingUdhaar ? 'Update Karein' : 'Udhar Jodein'}</button>
+        </div>
+      </div>
+    `;
+
+    const dateInput = document.getElementById('u-date');
+    dateInput.max = todayStr();
+    dateInput.value = existingUdhaar ? existingUdhaar.date : todayStr();
+    if (existingUdhaar) {
+      document.getElementById('u-name').value = existingUdhaar.customerName || '';
+      document.getElementById('u-amount').value = existingUdhaar.amount || '';
+      document.getElementById('u-note').value = existingUdhaar.note || '';
+    }
+
+    document.getElementById('btn-back').addEventListener('click', renderUdhar);
+    document.getElementById('btn-save-udhaar').addEventListener('click', () => {
+      const customerName = document.getElementById('u-name').value.trim();
+      const amount = Number(document.getElementById('u-amount').value);
+      const date = dateInput.value || todayStr();
+      const note = document.getElementById('u-note').value.trim();
+      if (!customerName) { alert('Customer ka naam daalein'); return; }
+      if (!amount || amount <= 0) { alert('Amount daalein'); return; }
+      onSave({ customerName, amount, date, note });
     });
   }
 
