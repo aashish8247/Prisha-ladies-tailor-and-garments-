@@ -416,6 +416,13 @@
     const totalExpense = entries.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
     const balance = totalIncome - totalExpense;
 
+    const currentMonthKey = todayStr().slice(0, 7);
+    const currentMonthEntries = entries.filter(e => e.date.slice(0, 7) === currentMonthKey);
+    const monthIncome = currentMonthEntries.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
+    const monthExpense = currentMonthEntries.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
+    const monthBalance = monthIncome - monthExpense;
+    const monthLabel = new Date(currentMonthKey + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
     const latestDate = entries.length > 0 ? entries[0].date : null;
     const latestDayEntries = latestDate ? entries.filter(e => e.date === latestDate) : [];
     const latestDayIncome = latestDayEntries.filter(e => e.type === 'income');
@@ -485,6 +492,25 @@
             <div>
               <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold">Total Balance</p>
               <p class="font-display text-lg font-bold ${balance >= 0 ? 'text-[#1F9D6C]' : 'text-[#D6455A]'}">₹${formatINR(balance)}</p>
+            </div>
+          </div>
+
+          <h3 class="font-display text-sm font-semibold text-[#8A1F4D] mt-5 mb-2">${monthLabel}</h3>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="bg-white rounded-2xl shadow-lg px-4 py-3.5 border-2 border-[#2FBF87]/40">
+              <p class="text-[11px] uppercase tracking-wide text-[#8A7F6A] font-semibold">↑ Is Mahine Income</p>
+              <p class="font-display text-lg font-bold text-[#1F9D6C]">₹${formatINR(monthIncome)}</p>
+            </div>
+            <div class="bg-white rounded-2xl shadow-lg px-4 py-3.5 border-2 border-[#F0748A]/40">
+              <p class="text-[11px] uppercase tracking-wide text-[#8A7F6A] font-semibold">↓ Is Mahine Kharcha</p>
+              <p class="font-display text-lg font-bold text-[#D6455A]">₹${formatINR(monthExpense)}</p>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl shadow-lg px-4 py-3.5 border-2 border-[#FFD976] mt-3 flex items-center gap-3">
+            <div class="w-9 h-9 rounded-full bg-gradient-to-br from-[#FFD976] to-[#E0A83F] flex items-center justify-center shadow-sm text-base shrink-0">👛</div>
+            <div>
+              <p class="text-[11px] text-[#8A7F6A] uppercase tracking-wide font-semibold">Is Mahine ka Balance</p>
+              <p class="font-display text-lg font-bold ${monthBalance >= 0 ? 'text-[#1F9D6C]' : 'text-[#D6455A]'}">₹${formatINR(monthBalance)}</p>
             </div>
           </div>
         </div>
