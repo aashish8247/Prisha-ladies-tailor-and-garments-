@@ -63,14 +63,10 @@
 
   const todayStr = () => new Date().toISOString().slice(0, 10);
   const formatINR = (n) => (Number(n) || 0).toLocaleString('en-IN');
+  const formatDDMMYY = (d) => d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(2, 4);
 
   function formatDateLabel(dateStr) {
-    const d = new Date(dateStr + 'T00:00:00');
-    const today = todayStr();
-    const yest = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    if (dateStr === today) return 'Aaj';
-    if (dateStr === yest) return 'Kal';
-    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', weekday: 'short' });
+    return formatDDMMYY(dateStr);
   }
 
   let entries = [];
@@ -428,9 +424,7 @@
     const latestDayIncome = latestDayEntries.filter(e => e.type === 'income');
     const latestDayExpense = latestDayEntries.filter(e => e.type === 'expense');
 
-    function plainDate(d) {
-      return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-    }
+    const plainDate = formatDDMMYY;
 
     function latestCard(e) {
       const isIncome = e.type === 'income';
@@ -693,7 +687,7 @@
               const dayKeys = Object.keys(dayGroups).sort((a, b) => b.localeCompare(a));
               return dayKeys.map((d, idx) => `
                 <div class="${idx > 0 ? 'mt-3 pt-3 border-t border-dashed border-[#E8DFC8]' : ''}">
-                  <p class="text-[10px] font-bold text-[#C9A24B] uppercase tracking-wider mb-1.5">${d.slice(8,10)}/${d.slice(5,7)}/${d.slice(0,4)}</p>
+                  <p class="text-[10px] font-bold text-[#C9A24B] uppercase tracking-wider mb-1.5">${formatDDMMYY(d)}</p>
                   <div class="space-y-1">
                     ${dayGroups[d].map(e => `
                       <div class="flex items-center justify-between text-sm py-0.5">
@@ -775,7 +769,7 @@
       }
       return rows.map((e, i) => `
         <div style="padding:8px 10px;${i !== rows.length - 1 ? 'border-bottom:1px solid #F3EBDA;' : ''}">
-          <div style="font-size:11px;color:#8A1F4D;font-weight:700;">${e.date.slice(8, 10)}/${e.date.slice(5, 7)}</div>
+          <div style="font-size:11px;color:#8A1F4D;font-weight:700;">${formatDDMMYY(e.date)}</div>
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-top:1px;">
             <div style="font-size:12px;color:#3A2E20;min-width:0;word-break:break-word;">${e.note || (e.type === 'income' ? 'Silai Income' : 'Kharcha')}</div>
             <div style="font-size:13px;font-weight:700;white-space:nowrap;color:${color};flex-shrink:0;">₹${formatINR(e.amount)}</div>
@@ -863,7 +857,7 @@
   function buildVyapariReportNode(v) {
     const baaki = vyapariBaaki(v);
     const txns = (v.transactions || []).slice().sort((a, b) => a.date.localeCompare(b.date));
-    const plainDate = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const plainDate = formatDDMMYY;
 
     const node = document.createElement('div');
     node.style.width = '720px';
@@ -1096,9 +1090,7 @@
       </div>
     `;
 
-    function plainDate(d) {
-      return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-    }
+    const plainDate = formatDDMMYY;
 
     const listEl = document.getElementById('vyapari-txn-list');
     if (txns.length === 0) {
