@@ -592,7 +592,7 @@
           <label id="note-label" class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold"></label>
           <input id="input-note" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
           <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Date</label>
-          <input id="input-date" type="date" class="w-full mt-1 mb-6 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+          <div class="relative mt-1 mb-6"><div class="w-full bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm flex items-center justify-between"><span id="input-date-text">dd/mm/yy</span><span>📅</span></div><input id="input-date" type="date" class="dd-date absolute inset-0 w-full h-full opacity-0" /></div>
           <button id="btn-save" class="w-full py-3 rounded-xl text-white font-semibold shadow-md">${saveLabel}</button>
         </div>
       </div>
@@ -1170,7 +1170,7 @@
           <input id="t-note" placeholder="${isMaal ? 'Jaise: Cotton kapda 20 meter' : 'Jaise: Cash diya'}" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
 
           <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Date</label>
-          <input id="t-date" type="date" class="w-full mt-1 mb-6 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+          <div class="relative mt-1 mb-6"><div class="w-full bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm flex items-center justify-between"><span id="t-date-text">dd/mm/yy</span><span>📅</span></div><input id="t-date" type="date" class="dd-date absolute inset-0 w-full h-full opacity-0" /></div>
 
           <button id="btn-save-txn" class="w-full py-3 rounded-xl text-white font-semibold shadow-md ${isMaal ? 'bg-gradient-to-r from-[#C9A24B] to-[#8A1F4D]' : 'bg-gradient-to-r from-[#1F9D6C] to-[#2FBF87]'}">${existingTxn ? 'Update Karein' : 'Save Karein'}</button>
         </div>
@@ -1299,7 +1299,7 @@
           </div>
 
           <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Date</label>
-          <input id="u-date" type="date" class="w-full mt-1 mb-4 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
+          <div class="relative mt-1 mb-4"><div class="w-full bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm flex items-center justify-between"><span id="u-date-text">dd/mm/yy</span><span>📅</span></div><input id="u-date" type="date" class="dd-date absolute inset-0 w-full h-full opacity-0" /></div>
 
           <label class="text-xs text-[#8A7F6A] uppercase tracking-wide font-semibold">Note (optional)</label>
           <input id="u-note" placeholder="Jaise: Blouse ka bakaya" class="w-full mt-1 mb-6 bg-white border border-[#E8DFC8] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#C9A24B]" />
@@ -1636,6 +1636,24 @@
       }
     });
   }
+
+  // Date fields: show dd/mm/yy (native picker still opens on tap, but text is always dd/mm/yy)
+  function bindDDMMYY(input) {
+    const text = document.getElementById(input.id + '-text');
+    const proto = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    const refresh = () => { if (text) text.textContent = input.value ? formatDDMMYY(input.value) : 'dd/mm/yy'; };
+    Object.defineProperty(input, 'value', {
+      get() { return proto.get.call(this); },
+      set(v) { proto.set.call(this, v); refresh(); },
+    });
+    input.addEventListener('change', refresh);
+    input.addEventListener('input', refresh);
+    input.setAttribute('data-bound', '1');
+    refresh();
+  }
+  new MutationObserver(() => {
+    app.querySelectorAll('input.dd-date:not([data-bound])').forEach(bindDDMMYY);
+  }).observe(app, { childList: true, subtree: true });
 
   if (syncCode) {
     startSync();
